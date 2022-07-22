@@ -73,6 +73,7 @@
 (require 'compile)
 (require 'disass)
 (require 'json)
+(require 'color)
 
 (require 'rmsbolt-java)
 (require 'rmsbolt-split)
@@ -227,6 +228,8 @@ may not be cleared to default as variables are usually."
 
 (defvar rmsbolt-overlays nil
   "List of overlays to use.")
+(defvar-local rmsbolt--rainbow-overlays nil
+  "List of rainbow overlays to use.")
 (defvar rmsbolt-compile-delay 0.4
   "Time in seconds to delay before recompiling if there is a change.")
 (defvar rmsbolt--automated-compile nil
@@ -1343,6 +1346,47 @@ Argument ASM-LINES input lines."
         (push line result)))
     (nreverse result)))
 
+(defun rmsbolt--rainbowize (idx total src-buffer src-line asm-regions)
+  (let* ((background-hsl
+          (apply #'color-rgb-to-hsl (color-name-to-rgb (face-background 'default))))
+         (color (apply #'color-rgb-to-hex
+                       (color-hsl-to-rgb (/ (* 1.0 idx) total)
+                                         (cl-second background-hsl)
+                                         (cl-third background-hsl))))
+         all-ovs
+         _src-ov)
+    (save-excursion
+      (cl-loop
+       for (beg . end) in (cl-sort asm-regions #'< :key #'car)
+       for asm-ov =
+       (progn
+         (goto-char (point-min)) ;; TODO: could optimize
+         (make-overlay (progn (forward-line (1- beg))
+                              (line-beginning-position))
+                       (progn (forward-line (- end beg))
+                              (line-end-position))))
+       do
+       (overlay-put asm-ov 'priority 0)
+       (push asm-ov all-ovs)
+       (overlay-put asm-ov 'face `(:background ,color))))
+    (when asm-regions
+      (with-current-buffer src-buffer
+        (save-excursion
+          (goto-char (point-min))
+          (forward-line (1- src-line))
+          (let ((ov (make-overlay (line-beginning-position)
+                                  (1+ (line-end-position)))))
+            (push ov all-ovs)
+            (overlay-put ov 'face `(:background ,color))
+            (overlay-put ov 'priority 0)))
+        (setq-local rmsbolt--rainbow-overlays
+                    (append all-ovs
+                            rmsbolt--rainbow-overlays))))))
+
+(defun rmsbolt--rainbowize-cleanup ()
+  (mapc #'delete-overlay rmsbolt--rainbow-overlays)
+  (setq rmsbolt--rainbow-overlays nil))
+
 ;;;;; Handlers
 (cl-defun rmsbolt--handle-finish-compile (buffer str &key override-buffer stopped)
   "Finish hook for compilations.
@@ -1418,6 +1462,15 @@ Argument STOPPED The compilation was stopped to start another compilation."
                      (set-window-point window old-point)))
                  (asm-mode)
                  (rmsbolt-mode 1)
+                 (let ((i 0))
+                   (maphash (lambda (k v)
+                              (rmsbolt--rainbowize
+                               (prog1 i (cl-incf i))
+                               (hash-table-count ht)
+                               src-buffer
+                               k
+                               v))
+                            ht))
                  (setq rmsbolt-src-buffer src-buffer)
                  (display-buffer (current-buffer))
                  (run-at-time 0 nil #'rmsbolt-update-overlays))))
@@ -1536,6 +1589,7 @@ and return it."
            (default-directory (or rmsbolt-default-directory
                                   rmsbolt--temp-dir)))
       (run-hooks 'rmsbolt-after-parse-hook)
+      (rmsbolt--rainbowize-cleanup)
       (when (buffer-local-value 'rmsbolt-disassemble src-buffer)
         (pcase
             (rmsbolt-l-objdumper lang)
@@ -1676,6 +1730,7 @@ and return it."
   "Setup overlay with START and END in BUF."
   (let ((o (make-overlay start end buf)))
     (overlay-put o 'face 'rmsbolt-current-line-face)
+    (overlay-put o 'priority 1)
     o))
 (cl-defun rmsbolt--point-visible (point)
   "Check if the current point is visible in a window in the current buffer."
