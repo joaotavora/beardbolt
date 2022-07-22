@@ -102,9 +102,9 @@
   :group 'rmsbolt)
 (defcustom rmsbolt-automatic-recompile t
   "Whether to automatically save and recompile the source buffer.
-This setting is automatically disabled on large buffers, set
-'force to force-enable it.
-To only recompile when the buffer is manually saved, set 'on-save."
+This setting is automatically disabled on large buffers, set to
+`force' to force-enable it.  To only recompile when the buffer is
+manually saved, set to `on-save'."
   :type '(choice (const :tag "Off" nil)
                  (const :tag "On save" on-save)
                  (const :tag "On" t)
@@ -487,7 +487,7 @@ Use SRC-BUFFER as buffer for local variables."
 (cl-defun rmsbolt--lisp-compile-cmd (&key src-buffer)
   "Process a compile command for common lisp.
 
-   Assumes function name to disassemble is 'main'."
+   Assumes function name to disassemble is \\='main\\='."
   (rmsbolt--with-files
    src-buffer
    (let* ((cmd (buffer-local-value 'rmsbolt-command src-buffer))
@@ -679,8 +679,7 @@ https://github.com/derickr/vld"
   "Process a compile command for nim."
   (rmsbolt--with-files
    src-buffer
-   (let* ((disass (buffer-local-value 'rmsbolt-disassemble src-buffer))
-          (cmd (buffer-local-value 'rmsbolt-command src-buffer))
+   (let* ((cmd (buffer-local-value 'rmsbolt-command src-buffer))
 	  (cmd
 	   (let* ((outdir (expand-file-name "nim-cache" rmsbolt--temp-dir)))
 		  (string-join
@@ -692,7 +691,7 @@ https://github.com/derickr/vld"
 			 src-filename
 			 (concat "&& cp "
 				 (expand-file-name (concat "@m"
-							   (ff-basename src-filename)
+							   (file-name-nondirectory src-filename)
 							   (if (string-match (rx "nim cpp") cmd) ".cpp.o" ".c.o"))
 							   outdir)
 				 " " output-filename))
