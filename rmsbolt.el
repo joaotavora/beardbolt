@@ -1345,42 +1345,41 @@ Argument ASM-LINES input lines."
         (push line result)))
     (nreverse result)))
 
-(defun rmsbolt--rainbowize (idx total src-buffer src-line asm-regions)
+(defun rmsbolt--rainbowize (line-mappings src-buffer)
   (let* ((background-hsl
           (apply #'color-rgb-to-hsl (color-name-to-rgb (face-background 'default))))
-         (color (apply #'color-rgb-to-hex
-                       (color-hsl-to-rgb (/ (* 1.0 idx) total)
-                                         (cl-second background-hsl)
-                                         (cl-third background-hsl))))
          all-ovs
-         _src-ov)
-    (save-excursion
-      (cl-loop
-       for (beg . end) in (cl-sort asm-regions #'< :key #'car)
-       for asm-ov =
-       (progn
-         (goto-char (point-min)) ;; TODO: could optimize
-         (make-overlay (progn (forward-line (1- beg))
-                              (line-beginning-position))
-                       (progn (forward-line (- end beg))
-                              (line-end-position))))
-       do
-       (overlay-put asm-ov 'priority 0)
-       (push asm-ov all-ovs)
-       (overlay-put asm-ov 'face `(:background ,color))))
-    (when asm-regions
-      (with-current-buffer src-buffer
-        (save-excursion
-          (goto-char (point-min))
-          (forward-line (1- src-line))
-          (let ((ov (make-overlay (line-beginning-position)
-                                  (1+ (line-end-position)))))
-            (push ov all-ovs)
-            (overlay-put ov 'face `(:background ,color))
-            (overlay-put ov 'priority 0)))
-        (setq-local rmsbolt--rainbow-overlays
-                    (append all-ovs
-                            rmsbolt--rainbow-overlays))))))
+         (idx -1)
+         (total (hash-table-count line-mappings)))
+    (maphash
+     (lambda (src-line asm-regions)
+       (when (not (zerop src-line))
+         (cl-loop
+          with color =
+          (apply #'color-rgb-to-hex
+                 (color-hsl-to-rgb (/ (* 1.0 (cl-incf idx)) total)
+                                   (cl-second background-hsl)
+                                   (cl-third background-hsl)))
+          for (beg . end) in (cl-getf asm-regions :positions)
+          for asm-ov = (make-overlay beg end)
+          do
+          (overlay-put asm-ov 'priority 0)
+          (push asm-ov all-ovs)
+          (overlay-put asm-ov 'face `(:background ,color))
+          finally
+          (with-current-buffer src-buffer
+            (save-excursion
+              (goto-char (point-min))
+              (forward-line (1- src-line))
+              (let ((ov (make-overlay (line-beginning-position)
+                                      (1+ (line-end-position)))))
+                (push ov all-ovs)
+                (overlay-put ov 'face `(:background ,color))
+                (overlay-put ov 'priority 0)))))))
+     line-mappings)
+    (with-current-buffer src-buffer
+      (mapc #'delete-overlay rmsbolt--rainbow-overlays)
+      (setq-local rmsbolt--rainbow-overlays all-ovs))))
 
 (defun rmsbolt--rainbowize-cleanup ()
   (mapc #'delete-overlay rmsbolt--rainbow-overlays)
@@ -1438,7 +1437,7 @@ Argument STOPPED The compilation was stopped to start another compilation."
                          (in-match
                           ;; We are in a match that has just expired
                           (push (cons start-match (1- linum))
-                                (gethash in-match ht))
+                                (cl-getf (gethash in-match ht) :lines))
                           (setq in-match nil
                                 start-match nil)
                           (go run-conditional))
@@ -1446,10 +1445,8 @@ Argument STOPPED The compilation was stopped to start another compilation."
                           (setq in-match property
                                 start-match linum))))))
                    (cl-incf linum))
-
                  (with-current-buffer src-buffer
                    (setq rmsbolt-line-mapping ht))
-
                  ;; Replace buffer contents but save point and scroll
                  (let* ((window (get-buffer-window output-buffer))
                         (old-point (window-point window))
@@ -1461,15 +1458,24 @@ Argument STOPPED The compilation was stopped to start another compilation."
                      (set-window-point window old-point)))
                  (asm-mode)
                  (rmsbolt-mode 1)
-                 (let ((i 0))
-                   (maphash (lambda (k v)
-                              (rmsbolt--rainbowize
-                               (prog1 i (cl-incf i))
-                               (hash-table-count ht)
-                               src-buffer
-                               k
-                               v))
-                            ht))
+                 ;; Enrich rmsbolt-line-mapping with actual position information
+                 (maphash (lambda (_k asm-regions)
+                            (save-excursion
+                              (plist-put
+                               asm-regions
+                               :positions
+                               (cl-loop
+                                for (begl . endl) in (cl-getf asm-regions :lines)
+                                collect (cons (progn
+                                                (goto-char (point-min))
+                                                (forward-line (1- begl))
+                                                (line-beginning-position))
+                                              (progn
+                                                (forward-line (- endl begl))
+                                                (line-end-position)))))))
+                          ht)
+                 
+                 (rmsbolt--rainbowize ht src-buffer)
                  (setq rmsbolt-src-buffer src-buffer)
                  (display-buffer (current-buffer))
                  (run-at-time 0 nil #'rmsbolt-update-overlays))))
@@ -1759,7 +1765,9 @@ and return it."
                   current-line
                 (get-text-property (point) 'rmsbolt-src-line)))
              (line-mappings (buffer-local-value 'rmsbolt-line-mapping src-buffer))
-             (asm-regions (gethash src-current-line line-mappings))
+             (asm-region-plist (gethash src-current-line line-mappings))
+             (asm-region-lines (plist-get asm-region-plist :lines))
+             (asm-region-positions (plist-get asm-region-plist :positions))
              ;; TODO also consider asm
              (src-pts
               (with-current-buffer src-buffer
@@ -1778,21 +1786,9 @@ and return it."
           (push (rmsbolt--setup-overlay (cl-first src-pts) (cl-second src-pts) src-buffer)
                 rmsbolt-overlays)
           (with-current-buffer output-buffer
-            (let ((saved-pt (point)))
-              (save-excursion
-                (cl-loop for (start . end) in asm-regions
-                         do (let ((start-pt (progn (rmsbolt--goto-line start)
-                                                   (c-point 'bol)))
-                                  (end-pt (progn (rmsbolt--goto-line end)
-                                                 (c-point 'bonl))))
-                              (when (and (not line-visible)
-                                         (not scroll-src-buffer-p))
-                                (setq line-visible (or (rmsbolt--point-visible start-pt)
-                                                       (rmsbolt--point-visible end-pt)
-                                                       (and (> saved-pt start-pt)
-                                                            (< saved-pt end-pt)))))
-                              (push (rmsbolt--setup-overlay start-pt end-pt output-buffer)
-                                    rmsbolt-overlays)))))
+            (cl-loop for (start . end) in asm-region-positions
+                     do (push (rmsbolt--setup-overlay start end output-buffer)
+                              rmsbolt-overlays))
             (when (or (not line-visible) force)
               ;; Scroll buffer to first line
               (when-let ((scroll-buffer (if scroll-src-buffer-p
@@ -1801,12 +1797,11 @@ and return it."
                          (window (get-buffer-window scroll-buffer))
                          (line-scroll (if scroll-src-buffer-p
                                           src-current-line
-                                        (progn
-                                          (car-safe
+                                        (car
                                            ;; If forcing, pick the last region instead
                                            (if force
-                                               (car-safe (last asm-regions))
-                                             (cl-first asm-regions)))))))
+                                               (car (last asm-region-lines))
+                                             (cl-first asm-region-lines))))))
                 (with-selected-window window
                   (rmsbolt--goto-line line-scroll)
                   ;; If we scrolled, recenter
