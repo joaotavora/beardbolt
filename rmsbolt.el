@@ -1477,15 +1477,11 @@ Argument STOPPED The compilation was stopped to start another compilation."
                  
                  (rmsbolt--rainbowize ht src-buffer)
                  (setq rmsbolt-src-buffer src-buffer)
-                 (display-buffer (current-buffer))
+                 (display-buffer (current-buffer) '(nil (inhibit-same-window . t)))
                  (run-at-time 0 nil #'rmsbolt-update-overlays))))
             (t ; Compilation failed
              ;; Display compilation buffer
-             (if rmsbolt--automated-compile
-                 (display-buffer buffer)
-               ;; If the compilation was directly started by the user,
-               ;; select the compilation buffer.
-               (pop-to-buffer buffer))
+             (display-buffer buffer '(nil (inhibit-same-window . t)))
              ;; TODO find a cleaner way to disable overlays.
              (with-current-buffer src-buffer
                (setq rmsbolt-line-mapping nil))
