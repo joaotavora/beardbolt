@@ -1349,17 +1349,25 @@ Argument ASM-LINES input lines."
   (let* ((background-hsl
           (apply #'color-rgb-to-hsl (color-name-to-rgb (face-background 'default))))
          all-ovs
-         (idx -1)
-         (total (hash-table-count line-mappings)))
+         (idx 0)
+         ;; The 1+ helps us keep our hue distance from the actual
+         ;; background color
+         (total (1+ (hash-table-count line-mappings))))
     (maphash
      (lambda (src-line asm-regions)
        (when (not (zerop src-line))
          (cl-loop
           with color =
           (apply #'color-rgb-to-hex
-                 (color-hsl-to-rgb (/ (* 1.0 (cl-incf idx)) total)
-                                   (cl-second background-hsl)
-                                   (cl-third background-hsl)))
+                 (color-hsl-to-rgb (mod (+ (cl-first background-hsl)
+                                           (/ (cl-incf idx) (float total)))
+                                        1)
+                                   (min (max (cl-second background-hsl)
+                                             0.25)
+                                        0.8)
+                                   (min (max (cl-third background-hsl)
+                                             0.25)
+                                        0.8)))
           for (beg . end) in (cl-getf asm-regions :positions)
           for asm-ov = (make-overlay beg end)
           do
