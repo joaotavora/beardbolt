@@ -1584,29 +1584,21 @@ and return it."
   (get-buffer-create "*bb-compilation*"))
 
 ;;;;; UI Functions
-(defun bb-compile ()
-  "Compile the current beardbolt buffer."
-  (interactive)
-  (when (and (buffer-modified-p)
-             (yes-or-no-p (format "Save buffer %s? " (buffer-name))))
-    (save-buffer))
-  (bb--gen-temp)
+(defun bb-compile (lang)
+  "Run beardbolt on current buffer for LANG.
+Interactively, determine LANG from `major-mode'."
+  (interactive (list (bb--get-lang)))
   ;; Current buffer = src-buffer at this point
-  (setq bb-src-buffer (current-buffer))
   (cond
-   ((eq major-mode 'asm-mode)
-    ;; We cannot compile asm-mode files
-    (message "Cannot compile assembly files. Are you sure you are not in the output buffer?"))
-   ((bb-l-elisp-compile-override (bb--get-lang))
+   ((bb-l-elisp-compile-override lang)
     (with-current-buffer (or (buffer-base-buffer) (current-buffer))
       (funcall
-       (bb-l-elisp-compile-override (bb--get-lang))
+       (bb-l-elisp-compile-override lang)
        :src-buffer (current-buffer))))
    (t
     (bb--stop-running-compilation)
     (bb--parse-options)
     (let* ((src-buffer (current-buffer))
-           (lang (bb--get-lang))
            (func (bb-l-compile-cmd-function lang))
            ;; Generate command
            (cmd
@@ -1840,7 +1832,7 @@ and return it."
   (when (and (bb--is-active-src-buffer)
              bb-automatic-recompile)
     (setq bb--automated-compile t)
-    (bb-compile)))
+    (bb-compile (bb--get-lang))))
 
 ;; Auto-save the src buffer after it has been unchanged for `bb-compile-delay' seconds.
 ;; The buffer is then automatically recompiled via `bb--after-save'.
@@ -1903,12 +1895,11 @@ This mode is enabled in both src and assembly output buffers."
 
 ;;;###autoload
 (defun beardbolt ()
-  "Start a beardbolt compilation and enable `bb-mode' for code region
-highlighting and automatic recompilation."
+  "Start beardbolt compilation, enable `bearbolt-mode'."
   (interactive)
   (unless bb-mode
     (bb-mode))
-  (bb-compile))
+  (bb-compile (bb--get-lang)))
 
 (provide 'beardbolt)
 
