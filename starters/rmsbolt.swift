@@ -1,9 +1,9 @@
 import Foundation
 
-// Swift rmsbolt starter file
+// Swift beardbolt starter file
 
 // Local Variables:
-// rmsbolt-disassemble: nil
+// beardbolt-disassemble: nil
 // End:
 
 func isRMS(_ a: Character) -> Int {

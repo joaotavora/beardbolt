@@ -1,4 +1,4 @@
--- Haskell rmsbolt starter file
+-- Haskell beardbolt starter file
 
 -- Haskell demangler support can be gained by placing the binary
 -- generated from this folder on your path under the name
@@ -6,10 +6,10 @@
 -- https://github.com/mattgodbolt/compiler-explorer/tree/master/haskell
 
 -- Local Variables:
--- rmsbolt-command: "ghc -O0"
+-- beardbolt-command: "ghc -O0"
 -- End:
 
-module Rmsbolt where
+module beardbolt where
 
 import Data.Char
 

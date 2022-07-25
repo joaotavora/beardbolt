@@ -1,7 +1,7 @@
-# python rmsbolt starter file
+# python beardbolt starter file
 #
 # Local Variables:
-# rmsbolt-command: "python3"
+# beardbolt-command: "python3"
 # End:
 
 RMS_MAP = {

@@ -1,11 +1,11 @@
-;; Common Lisp rmsbolt starter file
+;; Common Lisp beardbolt starter file
 
-;; rmsbolt ONLY DISASSEMBLES THE MAIN FUNCTION.
+;; beardbolt ONLY DISASSEMBLES THE MAIN FUNCTION.
 ;; Please ensure you have a main function defined,
 ;; and place all your code inside of it!
 
 ;; Local Variables:
-;; rmsbolt-command: "sbcl"
+;; beardbolt-command: "sbcl"
 ;; End:
 
 (defun main ()

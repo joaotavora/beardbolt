@@ -1,10 +1,10 @@
 #include <iostream>
 
-// C++ rmsbolt starter file
+// C++ beardbolt starter file
 
 // Local Variables:
-// rmsbolt-command: "g++ -O0"
-// rmsbolt-disassemble: nil
+// beardbolt-command: "g++ -O0"
+// beardbolt-disassemble: nil
 // End:
 
 int isRMS(int a) {

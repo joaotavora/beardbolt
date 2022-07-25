@@ -1,4 +1,4 @@
-	.file	"rmsbolt.c"
+	.file	"beardbolt.c"
 	.intel_syntax noprefix
 	.text
 .Ltext0:
@@ -7,7 +7,7 @@
 	.type	isRMS, @function
 isRMS:
 .LFB11:
-	.file 1 "/tmp/rmsbolt-LsubiK/rmsbolt.c"
+	.file 1 "/tmp/beardbolt-LsubiK/beardbolt.c"
 	.loc 1 11 0
 	.cfi_startproc
 .LVL0:
@@ -906,11 +906,11 @@ CSWTCH.1:
 .LASF14:
 	.string	"_IO_read_end"
 .LASF55:
-	.string	"/tmp/rmsbolt-LsubiK/rmsbolt.c"
+	.string	"/tmp/beardbolt-LsubiK/beardbolt.c"
 .LASF51:
 	.string	"stderr"
 .LASF56:
-	.string	"/tmp/rmsbolt-LsubiK"
+	.string	"/tmp/beardbolt-LsubiK"
 .LASF32:
 	.string	"_lock"
 .LASF6:

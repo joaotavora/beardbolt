@@ -1,11 +1,11 @@
 (source gnu)
 (source melpa)
 
-(package-file "rmsbolt.el")
+(package-file "beardbolt.el")
 
-(files "rmsbolt.el"
-	   "rmsbolt-java.el"
-	   "rmsbolt-split.el")
+(files "beardbolt.el"
+	   "beardbolt-java.el"
+	   "beardbolt-split.el")
 
 (development
  (depends-on "ert-runner")

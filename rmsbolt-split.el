@@ -1,10 +1,10 @@
-;;; rmsbolt-split.el --- An Elisp library to edit command lines -*- lexical-binding: t; -*-
+;;; beardbolt-split.el --- An Elisp library to edit command lines -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2018 Jay Kamat
 ;; Author: Jay Kamat <jaygkamat@gmail.com>
 ;; Version: 0.1.0
 ;; Keywords: compilation, tools
-;; URL: http://gitlab.com/jgkamat/rmsbolt
+;; URL: http://gitlab.com/jgkamat/beardbolt
 ;; Package-Requires: ((emacs "25.1"))
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -37,24 +37,24 @@
 
 ;;; Variables
 
-(defvar rmsbolt-split--regexp (rx (1+ blank)))
+(defvar beardbolt-split--regexp (rx (1+ blank)))
 
 ;;; Code:
 
-(defun rmsbolt-split-rm-single (cmd flag &optional comparator)
+(defun beardbolt-split-rm-single (cmd flag &optional comparator)
   "Remove a single FLAG from CMD.
 
 Optionally compares using COMPARATOR."
-  (let ((cmd (split-string cmd rmsbolt-split--regexp))
+  (let ((cmd (split-string cmd beardbolt-split--regexp))
         (comparator (or comparator #'string=)))
     (mapconcat
      #'identity
      (cl-remove-if (apply-partially comparator flag) cmd)
      " ")))
 
-(defun rmsbolt-split-rm-double (cmd flag)
+(defun beardbolt-split-rm-double (cmd flag)
   "Remove a single FLAG and arg from CMD."
-  (let ((cmd (split-string cmd rmsbolt-split--regexp))
+  (let ((cmd (split-string cmd beardbolt-split--regexp))
         (removed nil))
     (mapconcat
      #'identity
@@ -69,6 +69,6 @@ Optionally compares using COMPARATOR."
                    cmd)
      " ")))
 
-(provide 'rmsbolt-split)
+(provide 'beardbolt-split)
 
-;;; rmsbolt-split.el ends here
+;;; beardbolt-split.el ends here

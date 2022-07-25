@@ -1,11 +1,11 @@
-// Java rmsbolt starter file
+// Java beardbolt starter file
 
 // Local Variables:
-// rmsbolt-command: "javac"
-// rmsbolt-filter-directives: t
+// beardbolt-command: "javac"
+// beardbolt-filter-directives: t
 // End:
 
-public class Rmsbolt {
+public class beardbolt {
 	public static int isRMS(char in) {
 		switch (in) {
 		case 'R':

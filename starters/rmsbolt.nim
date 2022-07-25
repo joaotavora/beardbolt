@@ -1,9 +1,9 @@
 import strutils
 
-# Nim rmsbolt starter file
+# Nim beardbolt starter file
 
 # Local Variables:
-# rmsbolt-command: "nim c --opt:size"
+# beardbolt-command: "nim c --opt:size"
 # End:
 
 

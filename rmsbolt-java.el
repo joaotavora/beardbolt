@@ -1,10 +1,10 @@
-;;; rmsbolt-java.el --- An Elisp library to parse javap output -*- lexical-binding: t; -*-
+;;; beardbolt-java.el --- An Elisp library to parse javap output -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2018 Jay Kamat
 ;; Author: Jay Kamat <jaygkamat@gmail.com>
 ;; Version: 0.1.0
 ;; Keywords: compilation, tools
-;; URL: http://gitlab.com/jgkamat/rmsbolt
+;; URL: http://gitlab.com/jgkamat/beardbolt
 ;; Package-Requires: ((emacs "25.1"))
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -27,7 +27,7 @@
 ;; correlating lines in source code to the generated output.
 ;;
 ;; This library takes in the output of `javap -c -l` split into a list by lines,
-;; which is the same format rmsbolt uses.
+;; which is the same format beardbolt uses.
 
 ;;; Requires:
 
@@ -37,32 +37,32 @@
 ;;; Code:
 
 ;;;; Regexes
-(defvar rmsbolt-java-code-start  (rx bol (1+ space)
+(defvar beardbolt-java-code-start  (rx bol (1+ space)
                                      (group "Code:")))
-(defvar rmsbolt-java-line-table-start  (rx bol (1+ space)
+(defvar beardbolt-java-line-table-start  (rx bol (1+ space)
                                            (group "LineNumberTable:")))
-(defvar rmsbolt-java-local-table-start  (rx bol (1+ space)
+(defvar beardbolt-java-local-table-start  (rx bol (1+ space)
                                             (group "LocalVariableTable:")))
-(defvar rmsbolt-java-code (rx bol (group (1+ space)) (group (1+ digit))
+(defvar beardbolt-java-code (rx bol (group (1+ space)) (group (1+ digit))
                               ":" (1+ space) (group (1+ any)) eol))
-(defvar rmsbolt-java-line-table (rx bol (1+ space) "line" (1+ space) (group (1+ digit))
+(defvar beardbolt-java-line-table (rx bol (1+ space) "line" (1+ space) (group (1+ digit))
                                     ":" (1+ space) (group (1+ digit))))
 
 ;;;; Functions
-(defun rmsbolt-java-process-bytecode (asm-lines &optional filter)
+(defun beardbolt-java-process-bytecode (asm-lines &optional filter)
   "Process ASM-LINES to add properties refrencing the source code.
 Also FILTER \"useless\" lines out, optionally."
   (let (result state result-hold  code-block code-linum in-bracket)
     (dolist (line asm-lines)
       (pcase state
         ('nil ;; We haven't found any special blocks, so look for them and copy to output
-         (when (string-match-p rmsbolt-java-code-start line)
+         (when (string-match-p beardbolt-java-code-start line)
            (setq state 'code-found)
            (push line result)))
         ('code-found ;; We are past Code: so begin parsing instructions
-         (if (string-match-p rmsbolt-java-line-table-start line)
+         (if (string-match-p beardbolt-java-line-table-start line)
              (setq state 'linum-found)
-           (if (and (string-match rmsbolt-java-code line)
+           (if (and (string-match beardbolt-java-code line)
                     (match-string 1 line)
                     (match-string 2 line)
                     (match-string 3 line)
@@ -80,14 +80,14 @@ Also FILTER \"useless\" lines out, optionally."
                (setq in-bracket nil))
              )))
         ('linum-found ;; We are past LineNumberTable, so begin generating the src->code table
-         (if (string-match-p rmsbolt-java-local-table-start line)
+         (if (string-match-p beardbolt-java-local-table-start line)
              (progn
                (setq state 'localvar-found)
                ;; Get everything ready for agg
                (setq code-block (nreverse code-block))
                (setq code-linum (nreverse code-linum)))
 
-           (if (and (string-match rmsbolt-java-line-table line)
+           (if (and (string-match beardbolt-java-line-table line)
                     (match-string 1 line)
                     (match-string 2 line))
                (push (cons (string-to-number (match-string 2 line))
@@ -110,7 +110,7 @@ Also FILTER \"useless\" lines out, optionally."
                  (when (and current-mapping
                             (numberp (cdr current-mapping)))
                    (add-text-properties 0 (length current-line)
-                                        `(rmsbolt-src-line ,(cdr current-mapping)) current-line))
+                                        `(beardbolt-src-line ,(cdr current-mapping)) current-line))
                  (push current-line result)))
              ;; Don't keep agging
              (setq code-linum nil
@@ -129,6 +129,6 @@ Also FILTER \"useless\" lines out, optionally."
           (push line result-hold))))
     (nreverse result)))
 
-(provide 'rmsbolt-java)
+(provide 'beardbolt-java)
 
-;;; rmsbolt-java.el ends here
+;;; beardbolt-java.el ends here

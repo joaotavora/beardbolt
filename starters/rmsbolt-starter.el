@@ -1,4 +1,4 @@
-;;; rmsbolt-starter.el --- Starter file for rmsbolt -*- lexical-binding: t; -*-
+;;; beardbolt-starter.el --- Starter file for beardbolt -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; A simple starter!
@@ -24,4 +24,4 @@
 
 (main)
 
-;;; rmsbolt-starter.el ends here
+;;; beardbolt-starter.el ends here

@@ -1,11 +1,11 @@
 
 
-(* OCaml rmsbolt starter *)
+(* OCaml beardbolt starter *)
 
 (*
 Local Variables:
-rmsbolt-command: "ocamlopt"
-rmsbolt-disassemble: nil
+beardbolt-command: "ocamlopt"
+beardbolt-disassemble: nil
 End:
 *)
 

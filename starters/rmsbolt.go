@@ -4,11 +4,11 @@ import (
 	"fmt"
 )
 
-// Go rmsbolt starter file
+// Go beardbolt starter file
 
 // Local Variables:
-// rmsbolt-command: "go"
-// rmsbolt-disassemble: t
+// beardbolt-command: "go"
+// beardbolt-disassemble: t
 // End:
 
 func isRMS(a int) int {

@@ -1,10 +1,10 @@
-;;; rmsbolt.el --- A compiler output viewer -*- lexical-binding: t; -*-
+;;; beardbolt.el --- A compiler output viewer -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2018-2021 Jay Kamat
 ;; Author: Jay Kamat <jaygkamat@gmail.com>
 ;; Version: 0.1.2
 ;; Keywords: compilation, tools
-;; URL: http://gitlab.com/jgkamat/rmsbolt
+;; URL: http://gitlab.com/jgkamat/beardbolt
 ;; Package-Requires: ((emacs "25.1"))
 
 ;; This program is free software; you can redistribute it and/or modify
@@ -22,7 +22,7 @@
 
 ;;; Commentary:
 
-;; RMSBolt is a package to provide assembly or bytecode output for a source
+;; beardbolt is a package to provide assembly or bytecode output for a source
 ;; code input file.
 ;;
 ;; It currently supports: C/C++, OCaml, Haskell, Python, Java, Go, PHP, D,
@@ -41,22 +41,22 @@
 ;; to the source and vice versa
 ;;
 ;; Tweakables:
-;; RMSBolt is primarily configured with Emacs local variables. This lets you
-;; change compiler and rmsbolt options simply by editing a local variable block.
+;; beardbolt is primarily configured with Emacs local variables. This lets you
+;; change compiler and beardbolt options simply by editing a local variable block.
 ;;
 ;; Notable options:
-;; `rmsbolt-command': determines the prefix of the compilation command to use.
-;; `rmsbolt-default-directory': determines the default-drectory to compile from.
-;; `rmsbolt-disassemble': disassemble from a compiled binary with objdump, if supported.
-;; `rmsbolt-filter-*': Tweak filtering of binary output.
-;; `rmsbolt-asm-format': Choose between intel att, and other syntax if supported.
-;; `rmsbolt-demangle': Demangle the output, if supported.
+;; `beardbolt-command': determines the prefix of the compilation command to use.
+;; `beardbolt-default-directory': determines the default-drectory to compile from.
+;; `beardbolt-disassemble': disassemble from a compiled binary with objdump, if supported.
+;; `beardbolt-filter-*': Tweak filtering of binary output.
+;; `beardbolt-asm-format': Choose between intel att, and other syntax if supported.
+;; `beardbolt-demangle': Demangle the output, if supported.
 ;;
 ;; For more advanced configuration (to the point where you can override almost
-;; all of RMSbolt yourself), you can set `rmsbolt-language-descriptor' with a
+;; all of beardbolt yourself), you can set `beardbolt-language-descriptor' with a
 ;; replacement language spec.
 ;;
-;; Please see the readme at https://gitlab.com/jgkamat/rmsbolt for
+;; Please see the readme at https://gitlab.com/jgkamat/beardbolt for
 ;; more information!
 ;;
 ;; Thanks:
@@ -75,32 +75,32 @@
 (require 'json)
 (require 'color)
 
-(require 'rmsbolt-java)
-(require 'rmsbolt-split)
+(require 'beardbolt-java)
+(require 'beardbolt-split)
 
 ;;; Code:
 ;;;; Customize:
-(defgroup rmsbolt nil
-  "rmsbolt customization options"
+(defgroup beardbolt nil
+  "beardbolt customization options"
   :group 'applications)
 
-(defcustom rmsbolt-use-overlays t
+(defcustom beardbolt-use-overlays t
   "Whether we should use overlays to show matching code."
   :type 'boolean
-  :group 'rmsbolt)
-(defcustom rmsbolt-goto-match t
+  :group 'beardbolt)
+(defcustom beardbolt-goto-match t
   "Whether we should goto the match in the other buffer if it is non visible."
   :type 'boolean
-  :group 'rmsbolt)
-(defcustom rmsbolt-mode-lighter " RMS🗲"
-  "Lighter displayed in mode line when function `rmsbolt-mode' is active."
+  :group 'beardbolt)
+(defcustom beardbolt-mode-lighter " RMS🗲"
+  "Lighter displayed in mode line when function `beardbolt-mode' is active."
   :type 'string
-  :group 'rmsbolt)
-(defcustom rmsbolt-large-buffer-size 500
+  :group 'beardbolt)
+(defcustom beardbolt-large-buffer-size 500
   "Number of lines past which a buffer is considred large."
   :type 'integer
-  :group 'rmsbolt)
-(defcustom rmsbolt-automatic-recompile t
+  :group 'beardbolt)
+(defcustom beardbolt-automatic-recompile t
   "Whether to automatically save and recompile the source buffer.
 This setting is automatically disabled on large buffers, set to
 `force' to force-enable it.  To only recompile when the buffer is
@@ -109,30 +109,30 @@ manually saved, set to `on-save'."
                  (const :tag "On save" on-save)
                  (const :tag "On" t)
                  (const :tag "Always" force))
-  :group 'rmsbolt)
+  :group 'beardbolt)
 
 ;;;;; Buffer Local Tweakables
-(defcustom rmsbolt-disassemble nil
+(defcustom beardbolt-disassemble nil
   "Whether we should disassemble an output binary."
   :type 'boolean
   :safe 'booleanp
-  :group 'rmsbolt)
-(defcustom rmsbolt-command nil
-  "The base command to run rmsbolt from."
+  :group 'beardbolt)
+(defcustom beardbolt-command nil
+  "The base command to run beardbolt from."
   :type 'string
   ;; nil means use default command
   :safe (lambda (v) (or (booleanp v) (stringp v)))
-  :group 'rmsbolt)
-(defcustom rmsbolt-default-directory nil
+  :group 'beardbolt)
+(defcustom beardbolt-default-directory nil
   "The default directory to compile from.
 This must be an absolute path if set.
 Some exporters (such as pony) may not work with this set."
   :type 'string
   ;; nil means use default command
   :safe (lambda (v) (or (booleanp v) (stringp v)))
-  :group 'rmsbolt)
-(define-obsolete-variable-alias 'rmsbolt-intel-x86
-  'rmsbolt-asm-format "RMSBolt-0.2"
+  :group 'beardbolt)
+(define-obsolete-variable-alias 'beardbolt-intel-x86
+  'beardbolt-asm-format "beardbolt-0.2"
   "Sorry about not providing a proper migration for this variable.
 Unfortunately the new options aren't a straightforward mapping.
 Most likely what you want:
@@ -141,9 +141,9 @@ t -> \"intel\"
 nil -> \"att\"
 tool defaults -> nil
 
-This means that if you had rmsbolt-intel-x86 set manually, you
+This means that if you had beardbolt-intel-x86 set manually, you
 are now getting tool defaults.")
-(defcustom rmsbolt-asm-format "intel"
+(defcustom beardbolt-asm-format "intel"
   "Which output assembly format to use.
 
 The supported values depend highly on the exporter, but typical
@@ -157,36 +157,36 @@ Since this defaults to \"intel\", implementers must support this
 being set (at worst falling back to nil if passed \"intel\")."
   :type 'string
   :safe (lambda (v) (or (booleanp v) (stringp v)))
-  :group 'rmsbolt)
-(defcustom rmsbolt-filter-directives t
+  :group 'beardbolt)
+(defcustom beardbolt-filter-directives t
   "Whether to filter assembly directives."
   :type 'boolean
   :safe 'booleanp
-  :group 'rmsbolt)
-(defcustom rmsbolt-filter-labels t
+  :group 'beardbolt)
+(defcustom beardbolt-filter-labels t
   "Whether to filter unused labels."
   :type 'boolean
   :safe 'booleanp
-  :group 'rmsbolt)
-(defcustom rmsbolt-filter-comment-only t
+  :group 'beardbolt)
+(defcustom beardbolt-filter-comment-only t
   "Whether to filter comment-only lines."
   :type 'boolean
   :safe 'booleanp
-  :group 'rmsbolt)
-(defcustom rmsbolt-ignore-binary-limit nil
+  :group 'beardbolt)
+(defcustom beardbolt-ignore-binary-limit nil
   "Whether to ignore the binary limit. Could hang emacs..."
   :type 'boolean
   :safe 'booleanp
-  :group 'rmsbolt)
-(defcustom rmsbolt-demangle t
+  :group 'beardbolt)
+(defcustom beardbolt-demangle t
   "Whether to attempt to demangle the resulting assembly."
   :type 'boolean
   :safe 'booleanp
-  :group 'rmsbolt)
-(defcustom rmsbolt-flag-quirks t
+  :group 'beardbolt)
+(defcustom beardbolt-flag-quirks t
   "Whether to tweak flags to enable as many features as possible.
 
-In most cases, we will try to honor flags in rmsbolt-command as
+In most cases, we will try to honor flags in beardbolt-command as
 much as possible. However, some features may be disabled with
 some odd combinations of flags. This variable controls
 removing/adding flags to handle those cases.
@@ -194,132 +194,132 @@ removing/adding flags to handle those cases.
 Note that basic flags to ensure basic usage are always modified."
   :type 'boolean
   :safe 'booleanp
-  :group 'rmsbolt)
+  :group 'beardbolt)
 
-(defcustom rmsbolt-after-parse-hook nil
+(defcustom beardbolt-after-parse-hook nil
   "Hook after all parsing is done, but before compile command is run.
 
 Exercise caution when setting variables in this hook - doing so
-can disrupt rmsbolt state and cause issues. Variables set here
+can disrupt beardbolt state and cause issues. Variables set here
 may not be cleared to default as variables are usually."
-  :group 'rmsbolt
+  :group 'beardbolt
   :type 'hook)
 
 ;;;; Faces
 
-(defface rmsbolt-current-line-face
+(defface beardbolt-current-line-face
   '((t (:weight bold :inherit highlight)))
   "Face to fontify the current line for showing matches."
-  :group 'rmsbolt)
+  :group 'beardbolt)
 
 ;;;; Variables:
-(defvar rmsbolt-output-buffer "*rmsbolt-output*")
-;; whether rmsbolt-mode is enabled.
-(defvar rmsbolt-mode)
+(defvar beardbolt-output-buffer "*beardbolt-output*")
+;; whether beardbolt-mode is enabled.
+(defvar beardbolt-mode)
 
-(defvar rmsbolt-hide-compile t)
-(defvar rmsbolt-binary-asm-limit 10000)
-(defvar-local rmsbolt-line-mapping nil
+(defvar beardbolt-hide-compile t)
+(defvar beardbolt-binary-asm-limit 10000)
+(defvar-local beardbolt-line-mapping nil
   "Line mapping hashtable from source lines -> asm lines")
-(defvar-local rmsbolt-current-line nil
+(defvar-local beardbolt-current-line nil
   "Current line for fontifier.")
-(defvar-local rmsbolt--last-point nil
+(defvar-local beardbolt--last-point nil
   "Used to detect when the point has moved.")
 
-(defvar rmsbolt-overlays nil
+(defvar beardbolt-overlays nil
   "List of overlays to use.")
-(defvar-local rmsbolt--rainbow-overlays nil
+(defvar-local beardbolt--rainbow-overlays nil
   "List of rainbow overlays to use.")
-(defvar rmsbolt-compile-delay 0.4
+(defvar beardbolt-compile-delay 0.4
   "Time in seconds to delay before recompiling if there is a change.")
-(defvar rmsbolt--automated-compile nil
+(defvar beardbolt--automated-compile nil
   "Whether this compile was automated or not.")
-(defvar rmsbolt--shell "bash"
+(defvar beardbolt--shell "bash"
   "Which shell to prefer if available.
 Used to work around inconsistencies in alternative shells.")
 
-(defvar rmsbolt--temp-dir nil
+(defvar beardbolt--temp-dir nil
   "Temporary directory to use for compilation and other reasons.
 
 Please DO NOT modify this blindly, as this directory will get
 deleted on Emacs exit.")
 
-(defvar rmsbolt-dir nil
-  "The directory which rmsbolt is installed to.")
+(defvar beardbolt-dir nil
+  "The directory which beardbolt is installed to.")
 (when load-file-name
-  (setq rmsbolt-dir (file-name-directory load-file-name)))
+  (setq beardbolt-dir (file-name-directory load-file-name)))
 
-(defvar-local rmsbolt-src-buffer nil)
+(defvar-local beardbolt-src-buffer nil)
 
-(defvar-local rmsbolt--real-src-file nil
+(defvar-local beardbolt--real-src-file nil
   "If set, the real filename that we compiled from,
 probably due to a copy from this file.")
 ;; FIXME should we be unbinding the list here, or is setting nil good enough.
-(defvar-local rmsbolt--default-variables nil
+(defvar-local beardbolt--default-variables nil
   "A list of the buffer-local variables we filled in with defaults.
-Useful for determining if the user overrode things like `rmsbolt-command'.
+Useful for determining if the user overrode things like `beardbolt-command'.
 
 This list of variables will automatically be restored to nil.")
 
-(defvar-local rmsbolt-objdump-binary "objdump"
-  "A binary to use for objdumping when using `rmsbolt-disassemble'.
+(defvar-local beardbolt-objdump-binary "objdump"
+  "A binary to use for objdumping when using `beardbolt-disassemble'.
 Useful if you have multiple objdumpers and want to select between them")
 
 ;;;; Variable-like funcs
-(defun rmsbolt-output-filename (src-buffer &optional asm)
+(defun beardbolt-output-filename (src-buffer &optional asm)
   "Function for generating an output filename for SRC-BUFFER.
 
 Outputs assembly file if ASM.
 This function does NOT quote the return value for use in inferior shells."
   (if (and (not asm)
-           (buffer-local-value 'rmsbolt-disassemble src-buffer))
-      (expand-file-name "rmsbolt.out" rmsbolt--temp-dir)
-    (expand-file-name "rmsbolt.s" rmsbolt--temp-dir)))
+           (buffer-local-value 'beardbolt-disassemble src-buffer))
+      (expand-file-name "beardbolt.out" beardbolt--temp-dir)
+    (expand-file-name "beardbolt.s" beardbolt--temp-dir)))
 
 ;;;; Regexes
 
-(defvar rmsbolt-label-def  (rx bol (group (any ".a-zA-Z_$@")
+(defvar beardbolt-label-def  (rx bol (group (any ".a-zA-Z_$@")
                                           (0+ (any "a-zA-Z0-9$_@.")))
                                ":"))
-(defvar rmsbolt-defines-global (rx bol (0+ space) ".glob"
+(defvar beardbolt-defines-global (rx bol (0+ space) ".glob"
                                    (opt "a") "l" (0+ space)
                                    (group (any ".a-zA-Z_")
                                           (0+ (any "a-zA-Z0-9$_.")))))
-(defvar rmsbolt-label-find (rx (any ".a-zA-Z_")
+(defvar beardbolt-label-find (rx (any ".a-zA-Z_")
                                (0+
                                 (any "a-zA-Z0-9$_."))))
-(defvar rmsbolt-assignment-def (rx bol (0+ space)
+(defvar beardbolt-assignment-def (rx bol (0+ space)
                                    (group (any ".a-zA-Z_$")
                                           (1+ (any "a-zA-Z0-9$_.")))
                                    (0+ space) "="))
-(defvar rmsbolt-has-opcode (rx bol (0+ space)
+(defvar beardbolt-has-opcode (rx bol (0+ space)
                                (any "a-zA-Z")))
 
-(defvar rmsbolt-defines-function (rx bol (0+ space) ".type"
+(defvar beardbolt-defines-function (rx bol (0+ space) ".type"
                                      (0+ any) "," (0+ space) (any "@%")
                                      "function" eol))
-(defvar rmsbolt-data-defn (rx bol (0+ space) "."
+(defvar beardbolt-data-defn (rx bol (0+ space) "."
                               (group (or "string" "asciz" "ascii"
                                          (and
                                           (optional (any "1248")) "byte")
                                          "short" "word" "long" "quad" "value" "zero"))))
 
-(defvar rmsbolt-directive (rx bol (0+ space) "." (0+ any) eol))
-(defvar rmsbolt-endblock (rx "." (or "cfi_endproc" "data" "text" "section")))
-(defvar rmsbolt-comment-only (rx bol (0+ space) (or (and (or (any "#@;") "//"))
+(defvar beardbolt-directive (rx bol (0+ space) "." (0+ any) eol))
+(defvar beardbolt-endblock (rx "." (or "cfi_endproc" "data" "text" "section")))
+(defvar beardbolt-comment-only (rx bol (0+ space) (or (and (or (any "#@;") "//"))
                                                     (and "/*" (0+ any) "*/"))
                                  (0+ any) eol))
-(defvar rmsbolt-disass-line (rx bol
+(defvar beardbolt-disass-line (rx bol
                                 (group "/" (1+ (not (any ":")))) ":"
                                 (group (1+ num))
                                 (0+ any)))
-(defvar rmsbolt-disass-label (rx bol (group (1+ (any digit "a-f")))
+(defvar beardbolt-disass-label (rx bol (group (1+ (any digit "a-f")))
                                  (1+ space) "<"
                                  (group (1+ (not (any ">")))) ">:" eol))
-(defvar rmsbolt-disass-dest (rx (0+ any) (group (1+ (any digit "a-f")))
+(defvar beardbolt-disass-dest (rx (0+ any) (group (1+ (any digit "a-f")))
                                 (1+ space) "<" (group (1+ (not (any ">")))) ">" eol))
 
-(defvar rmsbolt-disass-opcode (rx bol (0+ space) (group (1+ (any digit "a-f")))
+(defvar beardbolt-disass-opcode (rx bol (0+ space) (group (1+ (any digit "a-f")))
                                   ":" (0+ space)
                                   (group (1+
                                           (repeat 2
@@ -327,24 +327,24 @@ This function does NOT quote the return value for use in inferior shells."
                                           (opt " ")))
                                   (0+ space)
                                   (group (0+ any))))
-(defvar rmsbolt-source-file (rx bol (0+ space) ".file" (1+ space)
+(defvar beardbolt-source-file (rx bol (0+ space) ".file" (1+ space)
                                 (group (1+ digit)) (1+ space) ?\"
                                 (group (1+ (not (any ?\")))) ?\"
                                 (opt (1+ space) ?\"
                                      (group (1+ (not (any ?\")))) ?\")
                                 (0+ any)))
-(defvar rmsbolt-source-tag (rx bol (0+ space) ".loc" (1+ space)
+(defvar beardbolt-source-tag (rx bol (0+ space) ".loc" (1+ space)
                                (group (1+ digit)) (1+ space)
                                (group (1+ digit))
                                (0+ any)))
-(defvar rmsbolt-source-stab (rx bol (0+ any) ".stabn" (1+ space)
+(defvar beardbolt-source-stab (rx bol (0+ any) ".stabn" (1+ space)
                                 (group (1+ digit)) ",0,"
                                 (group (1+ digit)) "," (0+ any)))
 
 ;;;; Classes
 
-(cl-defstruct (rmsbolt-lang
-               (:conc-name rmsbolt-l-))
+(cl-defstruct (beardbolt-lang
+               (:conc-name beardbolt-l-))
   (supports-disass
    nil
    :type 'bool
@@ -375,7 +375,7 @@ the compile command.")
   (default-directory
     nil
     :type 'string
-    :documentation "Default directory to run compilation in. By default, use rmsbolt--temp-dir.
+    :documentation "Default directory to run compilation in. By default, use beardbolt--temp-dir.
 If provided a function, call that function with the source buffer to determine
 the default directory.")
   (compile-cmd-function
@@ -393,12 +393,12 @@ the default directory.")
    :type 'function
    :documentation "A custom function to run instead of running any compilation command.
 Generally not useful with the sole exception of the emacs lisp disassembler.
-This function is responsible for calling `rmsbolt--handle-finish-compile'
+This function is responsible for calling `beardbolt--handle-finish-compile'
 Please be careful when setting this, as it bypasses most logic and is
 generally not useful."))
 
 ;;;; Helper Functions
-(defmacro rmsbolt--with-files (src-buffer &rest body)
+(defmacro beardbolt--with-files (src-buffer &rest body)
   "Execute BODY with `src-filename' and `output-filename' defined.
 Args taken from SRC-BUFFER.
 Return value is quoted for passing to the shell."
@@ -406,10 +406,10 @@ Return value is quoted for passing to the shell."
                         (buffer-file-name)))
          (output-filename
           (shell-quote-argument
-           (rmsbolt-output-filename ,src-buffer))))
+           (beardbolt-output-filename ,src-buffer))))
      ,@body))
 
-(defmacro rmsbolt--set-local (var val)
+(defmacro beardbolt--set-local (var val)
   "Set unquoted variable VAR to value VAL in current buffer."
   (declare (debug (symbolp form)))
   `(set (make-local-variable ,var) ,val))
@@ -417,26 +417,26 @@ Return value is quoted for passing to the shell."
 ;;;; Language Functions
 ;;;;; Compile Commands
 
-(defun rmsbolt--c-quirks (cmd &key src-buffer)
+(defun beardbolt--c-quirks (cmd &key src-buffer)
   "Handle quirks in CMD, and return unchanged or modified CMD.
 
 Use SRC-BUFFER as buffer for local variables."
-  (if (and (buffer-local-value 'rmsbolt-flag-quirks src-buffer)
+  (if (and (buffer-local-value 'beardbolt-flag-quirks src-buffer)
            (string-match-p (rx "-save-temps") cmd)
            (string-match-p (rx "-P") cmd))
-      (rmsbolt-split-rm-single cmd "-save-temps")
+      (beardbolt-split-rm-single cmd "-save-temps")
     cmd))
 
-(cl-defun rmsbolt--c-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--c-compile-cmd (&key src-buffer)
   "Process a compile command for gcc/clang."
 
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
    (let* ( ;; Turn off passing the source file if we find compile_commands
-          (no-src-filename (rmsbolt--handle-c-compile-cmd src-buffer))
-          (asm-format (buffer-local-value 'rmsbolt-asm-format src-buffer))
-          (disass (buffer-local-value 'rmsbolt-disassemble src-buffer))
-          (cmd (buffer-local-value 'rmsbolt-command src-buffer))
+          (no-src-filename (beardbolt--handle-c-compile-cmd src-buffer))
+          (asm-format (buffer-local-value 'beardbolt-asm-format src-buffer))
+          (disass (buffer-local-value 'beardbolt-disassemble src-buffer))
+          (cmd (buffer-local-value 'beardbolt-command src-buffer))
           (cmd (mapconcat #'identity
                           (list cmd
                                 "-g"
@@ -451,23 +451,23 @@ Use SRC-BUFFER as buffer for local variables."
                                            (not disass))
                                   (concat "-masm=" asm-format)))
                           " "))
-          (cmd (rmsbolt--c-quirks cmd :src-buffer src-buffer)))
+          (cmd (beardbolt--c-quirks cmd :src-buffer src-buffer)))
      cmd)))
 
-(cl-defun rmsbolt--ocaml-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--ocaml-compile-cmd (&key src-buffer)
   "Process a compile command for ocaml.
 
   Needed as ocaml cannot output asm to a non-hardcoded file"
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
-   (let* ((diss (buffer-local-value 'rmsbolt-disassemble src-buffer))
+   (let* ((diss (buffer-local-value 'beardbolt-disassemble src-buffer))
           (predicted-asm-filename (shell-quote-argument
                                    (concat (file-name-sans-extension (buffer-file-name)) ".s")))
-          (cmd (buffer-local-value 'rmsbolt-command src-buffer))
+          (cmd (buffer-local-value 'beardbolt-command src-buffer))
           (cmd (mapconcat #'identity
                           (list cmd
                                 "-g"
-                                (if (buffer-local-value 'rmsbolt-disassemble src-buffer)
+                                (if (buffer-local-value 'beardbolt-disassemble src-buffer)
                                     ""
                                   "-S")
                                 src-filename
@@ -484,13 +484,13 @@ Use SRC-BUFFER as buffer for local variables."
                                            " "))
                           " ")))
      cmd)))
-(cl-defun rmsbolt--lisp-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--lisp-compile-cmd (&key src-buffer)
   "Process a compile command for common lisp.
 
    Assumes function name to disassemble is \\='main\\='."
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
-   (let* ((cmd (buffer-local-value 'rmsbolt-command src-buffer))
+   (let* ((cmd (buffer-local-value 'beardbolt-command src-buffer))
           (interpreter (cl-first (split-string cmd nil t)))
           (disass-eval "\"(disassemble 'main)\"")
           (disass-eval-unquoted "(disassemble 'main)"))
@@ -513,13 +513,13 @@ Use SRC-BUFFER as buffer for local variables."
                    " "))
        (_
         (error "This Common Lisp interpreter is not supported"))))))
-(cl-defun rmsbolt--rust-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--rust-compile-cmd (&key src-buffer)
   "Process a compile command for rustc."
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
-   (let* ((asm-format (buffer-local-value 'rmsbolt-asm-format src-buffer))
-          (disass (buffer-local-value 'rmsbolt-disassemble src-buffer))
-          (cmd (buffer-local-value 'rmsbolt-command src-buffer))
+   (let* ((asm-format (buffer-local-value 'beardbolt-asm-format src-buffer))
+          (disass (buffer-local-value 'beardbolt-disassemble src-buffer))
+          (cmd (buffer-local-value 'beardbolt-command src-buffer))
           (cmd (mapconcat #'identity
                           (list cmd
                                 "-g"
@@ -534,11 +534,11 @@ Use SRC-BUFFER as buffer for local variables."
                                   (concat "-Cllvm-args=--x86-asm-syntax=" asm-format)))
                           " ")))
      cmd)))
-(cl-defun rmsbolt--go-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--go-compile-cmd (&key src-buffer)
   "Process a compile command for go."
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
-   (let* ((cmd (buffer-local-value 'rmsbolt-command src-buffer))
+   (let* ((cmd (buffer-local-value 'beardbolt-command src-buffer))
           (cmd (mapconcat #'identity
                           (list cmd
                                 "tool" "compile"
@@ -547,21 +547,21 @@ Use SRC-BUFFER as buffer for local variables."
                                 src-filename)
                           " ")))
      cmd)))
-(cl-defun rmsbolt--d-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--d-compile-cmd (&key src-buffer)
   "Process a compile command for d"
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
-   (let* ((compiler (buffer-local-value 'rmsbolt-command src-buffer))
+   (let* ((compiler (buffer-local-value 'beardbolt-command src-buffer))
           (cmd (mapconcat
                 #'identity
                 (list compiler "-g" "-output-s" src-filename "-of" output-filename)
                 " ")))
      cmd)))
 
-(cl-defun rmsbolt--pony-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--pony-compile-cmd (&key src-buffer)
   "Process a compile command for ponyc."
-  (let* ((cmd (buffer-local-value 'rmsbolt-command src-buffer))
-         (dir (expand-file-name "pony/" rmsbolt--temp-dir))
+  (let* ((cmd (buffer-local-value 'beardbolt-command src-buffer))
+         (dir (expand-file-name "pony/" beardbolt--temp-dir))
          (_ (make-directory dir t))
          ;; (base-filename (file-name-sans-extension
          ;;                 (file-name-nondirectory
@@ -573,13 +573,13 @@ Use SRC-BUFFER as buffer for local variables."
          ;; TODO should we copy this in lisp here, or pass this to the compilation command?
          (_ (copy-file (buffer-file-name)
                        (expand-file-name dir) t))
-         (dis (buffer-local-value 'rmsbolt-disassemble src-buffer))
+         (dis (buffer-local-value 'beardbolt-disassemble src-buffer))
          (cmd (mapconcat #'identity
                          (list
                           "cd" dir "&&"
                           cmd
                           "-g"
-                          ;; FIXME: test this properly and use rmsbolt-asm-format to expose it.
+                          ;; FIXME: test this properly and use beardbolt-asm-format to expose it.
                           (if dis
                               "-r=obj"
                             "-r=asm")
@@ -587,75 +587,75 @@ Use SRC-BUFFER as buffer for local variables."
                           "&&" "mv"
                           (if dis object-filename asm-filename)
                           (shell-quote-argument
-                           (rmsbolt-output-filename src-buffer)))
+                           (beardbolt-output-filename src-buffer)))
                          " ")))
     (with-current-buffer src-buffer
-      (setq rmsbolt--real-src-file
+      (setq beardbolt--real-src-file
             (expand-file-name (file-name-nondirectory
                                (buffer-file-name))
                               dir)))
     cmd))
-(cl-defun rmsbolt--py-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--py-compile-cmd (&key src-buffer)
   "Process a compile command for python3."
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
-   (let* ((cmd (buffer-local-value 'rmsbolt-command src-buffer)))
+   (let* ((cmd (buffer-local-value 'beardbolt-command src-buffer)))
      (mapconcat #'identity
                 (list cmd "-m" "dis" src-filename
                       ">" output-filename)
                 " "))))
 
-(defun rmsbolt--hack-p (src-buffer)
+(defun beardbolt--hack-p (src-buffer)
   "Return non-nil if SRC-BUFFER should should use hhvm instead of php."
   (with-current-buffer src-buffer
     (save-excursion
       (goto-char (point-min))
       (re-search-forward (rx "<?hh") nil t))))
 
-(defun rmsbolt--php-default-compile-cmd (src-buffer)
+(defun beardbolt--php-default-compile-cmd (src-buffer)
   "Return the default php compile command for SRC-BUFFER."
-  (if (rmsbolt--hack-p src-buffer)
+  (if (beardbolt--hack-p src-buffer)
       "hh_single_compile"
     "php"))
 
-(cl-defun rmsbolt--php-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--php-compile-cmd (&key src-buffer)
   "Process a compile command for PHP.
 In order to disassemble opcdoes, we need to have the vld.so
 extension to php on.
 https://github.com/derickr/vld"
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
-   (if (rmsbolt--hack-p src-buffer)
-       (concat (buffer-local-value 'rmsbolt-command src-buffer)
+   (if (beardbolt--hack-p src-buffer)
+       (concat (buffer-local-value 'beardbolt-command src-buffer)
                " " src-filename " > " output-filename)
-     (concat (buffer-local-value 'rmsbolt-command src-buffer)
+     (concat (buffer-local-value 'beardbolt-command src-buffer)
              " -dvld.active=1 -dvld.execute=0 -dvld.verbosity=1 "
              src-filename " 2> " output-filename " > /dev/null"))))
 
-(cl-defun rmsbolt--hs-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--hs-compile-cmd (&key src-buffer)
   "Process a compile command for ghc."
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
-   (let* ((cmd (buffer-local-value 'rmsbolt-command src-buffer))
+   (let* ((cmd (buffer-local-value 'beardbolt-command src-buffer))
           (cmd (mapconcat #'identity
                           (list cmd
                                 "-g"
-                                (if (buffer-local-value 'rmsbolt-disassemble src-buffer)
+                                (if (buffer-local-value 'beardbolt-disassemble src-buffer)
                                     ""
                                   "-S")
                                 src-filename
                                 "-o" output-filename)
                           " ")))
      cmd)))
-(cl-defun rmsbolt--java-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--java-compile-cmd (&key src-buffer)
   "Process a compile command for ocaml.
 
   Needed as ocaml cannot output asm to a non-hardcoded file"
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
    (let* ((class-filename (shell-quote-argument
                            (concat (file-name-sans-extension (buffer-file-name)) ".class")))
-          (cmd (buffer-local-value 'rmsbolt-command src-buffer))
+          (cmd (buffer-local-value 'beardbolt-command src-buffer))
           (cmd (mapconcat #'identity
                           (list cmd
                                 "-g"
@@ -669,19 +669,19 @@ https://github.com/derickr/vld"
                           " ")))
      cmd)))
 
-(cl-defun rmsbolt--elisp-compile-override (&key src-buffer)
+(cl-defun beardbolt--elisp-compile-override (&key src-buffer)
   (let ((file-name (buffer-file-name)))
     (with-temp-buffer
-      (rmsbolt--disassemble-file file-name (current-buffer))
-      (rmsbolt--handle-finish-compile src-buffer nil :override-buffer (current-buffer)))))
+      (beardbolt--disassemble-file file-name (current-buffer))
+      (beardbolt--handle-finish-compile src-buffer nil :override-buffer (current-buffer)))))
 
-(cl-defun rmsbolt--nim-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--nim-compile-cmd (&key src-buffer)
   "Process a compile command for nim."
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
-   (let* ((cmd (buffer-local-value 'rmsbolt-command src-buffer))
+   (let* ((cmd (buffer-local-value 'beardbolt-command src-buffer))
 	  (cmd
-	   (let* ((outdir (expand-file-name "nim-cache" rmsbolt--temp-dir)))
+	   (let* ((outdir (expand-file-name "nim-cache" beardbolt--temp-dir)))
 		  (string-join
 		   (list cmd
 			 "--debugger:native"
@@ -698,16 +698,16 @@ https://github.com/derickr/vld"
 		   " "))))
      cmd)))
 
-(cl-defun rmsbolt--zig-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--zig-compile-cmd (&key src-buffer)
   "Process a compile command for zig."
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
-   (let* ((disass (buffer-local-value 'rmsbolt-disassemble src-buffer))
-          (cmd (buffer-local-value 'rmsbolt-command src-buffer))
+   (let* ((disass (buffer-local-value 'beardbolt-disassemble src-buffer))
+          (cmd (buffer-local-value 'beardbolt-command src-buffer))
           (cmd (string-join
                 (list cmd
                       src-filename
-                      "--cache-dir" (expand-file-name "zig-cache" rmsbolt--temp-dir)
+                      "--cache-dir" (expand-file-name "zig-cache" beardbolt--temp-dir)
                       (concat (if disass
                                   "-femit-bin="
                                 "-fno-emit-bin -femit-asm=")
@@ -715,12 +715,12 @@ https://github.com/derickr/vld"
                 " ")))
      cmd)))
 
-(cl-defun rmsbolt--swift-compile-cmd (&key src-buffer)
+(cl-defun beardbolt--swift-compile-cmd (&key src-buffer)
   "Process a compile command for swiftc."
-  (rmsbolt--with-files
+  (beardbolt--with-files
    src-buffer
-   (let* ((asm-format (buffer-local-value 'rmsbolt-asm-format src-buffer))
-          (cmd (buffer-local-value 'rmsbolt-command src-buffer))
+   (let* ((asm-format (buffer-local-value 'beardbolt-asm-format src-buffer))
+          (cmd (buffer-local-value 'beardbolt-command src-buffer))
           (cmd (mapconcat #'identity
                           (list cmd
                                 "-g"
@@ -734,7 +734,7 @@ https://github.com/derickr/vld"
 
 ;;;;; Hidden Function Definitions
 
-(defvar rmsbolt--hidden-func-c
+(defvar beardbolt--hidden-func-c
   (rx bol (or (and "__" (0+ any))
               (and "_" (or "init" "start" "fini"))
               (and (opt "de") "register_tm_clones")
@@ -742,7 +742,7 @@ https://github.com/derickr/vld"
               "frame_dummy"
               (and ".plt" (0+ any)))
       eol))
-(defvar rmsbolt--hidden-func-ocaml
+(defvar beardbolt--hidden-func-ocaml
   (rx bol
       (or (and "__" (0+ any))
           (and "_" (or "init" "start" "fini"))
@@ -758,7 +758,7 @@ https://github.com/derickr/vld"
           ;; filter out any lowercase
           (and (1+ (1+ lower) (opt (or "64" "32" "8" "16")) (opt "_"))))
       eol))
-(defvar rmsbolt--hidden-func-zig
+(defvar beardbolt--hidden-func-zig
   (rx bol (or (and "_" (0+ any))
               (and (opt "de") "register_tm_clones")
               "call_gmon_start"
@@ -768,19 +768,19 @@ https://github.com/derickr/vld"
 
 ;;;;; Demangling Functions
 
-(defun rmsbolt--path-to-swift-demangler ()
+(defun beardbolt--path-to-swift-demangler ()
   "Return the path to the configured Swift demangler, depending
   on the active toolchain."
-  (rmsbolt--path-to-swift-tool "swift-demangle"))
+  (beardbolt--path-to-swift-tool "swift-demangle"))
 
 ;;;;; Language Integrations
 
-(defun rmsbolt--path-to-swift-compiler ()
+(defun beardbolt--path-to-swift-compiler ()
   "Return the path to the configured Swift compiler, depending on
   the active toolchain."
-  (rmsbolt--path-to-swift-tool "swiftc"))
+  (beardbolt--path-to-swift-tool "swiftc"))
 
-(defun rmsbolt--path-to-swift-tool (swift-tool)
+(defun beardbolt--path-to-swift-tool (swift-tool)
   "Return the path to SWIFT-TOOL, depending on the active
 toolchain."
   (let* ((swift-tool-binary swift-tool)
@@ -795,7 +795,7 @@ toolchain."
       swift-tool-toolchain-path)
      (t nil))))
 
-(defun rmsbolt--parse-compile-commands (comp-cmds file)
+(defun beardbolt--parse-compile-commands (comp-cmds file)
   "Parse COMP-CMDS and extract a compilation dir and command for FILE."
   (when-let ((json-object-type 'alist)
              (json-array-type 'vector)
@@ -811,168 +811,168 @@ toolchain."
              (dir (alist-get 'directory entry))
              (cmd (alist-get 'command entry)))
     (list dir cmd)))
-(defun rmsbolt--handle-c-compile-cmd (src-buffer)
+(defun beardbolt--handle-c-compile-cmd (src-buffer)
   "Handle compile_commands.json for c/c++ for a given SRC-BUFFER.
 return t if successful."
-  (when-let ((defaults (buffer-local-value 'rmsbolt--default-variables src-buffer))
-             (default-dir (cl-find 'rmsbolt-default-directory defaults))
-             (default-cmd (cl-find 'rmsbolt-command defaults))
+  (when-let ((defaults (buffer-local-value 'beardbolt--default-variables src-buffer))
+             (default-dir (cl-find 'beardbolt-default-directory defaults))
+             (default-cmd (cl-find 'beardbolt-command defaults))
              (ccj "compile_commands.json")
              (compile-cmd-file
               (locate-dominating-file
                (buffer-file-name src-buffer)
                ccj))
              (compile-cmd-file (expand-file-name ccj compile-cmd-file))
-             (to-ret (rmsbolt--parse-compile-commands
+             (to-ret (beardbolt--parse-compile-commands
                       compile-cmd-file (buffer-file-name src-buffer))))
     (with-current-buffer src-buffer
-      (setq-local rmsbolt-default-directory (file-name-as-directory (cl-first to-ret)))
-      (setq-local rmsbolt-command
+      (setq-local beardbolt-default-directory (file-name-as-directory (cl-first to-ret)))
+      (setq-local beardbolt-command
                   ;; Remove -c, -S, and -o <arg> if present,
                   ;; as we will add them back
                   ;; Remove args starting with -flto, as -flto breaks asm output.
                   (thread-first (cl-second to-ret)
-                    (rmsbolt-split-rm-single "-c")
-                    (rmsbolt-split-rm-single "-S")
-                    (rmsbolt-split-rm-single "-flto" #'string-prefix-p)
-                    (rmsbolt-split-rm-double "-o")))
+                    (beardbolt-split-rm-single "-c")
+                    (beardbolt-split-rm-single "-S")
+                    (beardbolt-split-rm-single "-flto" #'string-prefix-p)
+                    (beardbolt-split-rm-double "-o")))
       t)))
 ;;;; Language Definitions
-(defvar rmsbolt-languages)
+(defvar beardbolt-languages)
 (setq
- rmsbolt-languages
+ beardbolt-languages
  `((c-mode
-    . ,(make-rmsbolt-lang :compile-cmd "gcc"
+    . ,(make-beardbolt-lang :compile-cmd "gcc"
                           :supports-asm t
                           :supports-disass t
                           :demangler "c++filt"
-                          :compile-cmd-function #'rmsbolt--c-compile-cmd
-                          :disass-hidden-funcs rmsbolt--hidden-func-c))
+                          :compile-cmd-function #'beardbolt--c-compile-cmd
+                          :disass-hidden-funcs beardbolt--hidden-func-c))
    (c++-mode
-    . ,(make-rmsbolt-lang :compile-cmd "g++"
+    . ,(make-beardbolt-lang :compile-cmd "g++"
                           :supports-asm t
                           :supports-disass t
                           :demangler "c++filt"
-                          :compile-cmd-function #'rmsbolt--c-compile-cmd
-                          :disass-hidden-funcs rmsbolt--hidden-func-c))
+                          :compile-cmd-function #'beardbolt--c-compile-cmd
+                          :disass-hidden-funcs beardbolt--hidden-func-c))
    (d-mode
-    . ,(make-rmsbolt-lang :compile-cmd "ldc2"
+    . ,(make-beardbolt-lang :compile-cmd "ldc2"
                           :supports-asm t
                           :supports-disass nil
                           :demangler "ddemangle"
-                          :compile-cmd-function #'rmsbolt--d-compile-cmd))
+                          :compile-cmd-function #'beardbolt--d-compile-cmd))
    ;; In order to parse ocaml files, you need the emacs ocaml mode, tuareg
    (tuareg-mode
-    . ,(make-rmsbolt-lang :compile-cmd "ocamlopt"
+    . ,(make-beardbolt-lang :compile-cmd "ocamlopt"
                           :supports-asm t
                           :supports-disass t
-                          :compile-cmd-function #'rmsbolt--ocaml-compile-cmd
-                          :disass-hidden-funcs rmsbolt--hidden-func-ocaml))
+                          :compile-cmd-function #'beardbolt--ocaml-compile-cmd
+                          :disass-hidden-funcs beardbolt--hidden-func-ocaml))
    (lisp-mode
-    . ,(make-rmsbolt-lang :compile-cmd "sbcl"
+    . ,(make-beardbolt-lang :compile-cmd "sbcl"
                           :supports-asm t
                           :supports-disass nil
                           :objdumper 'cat
-                          :compile-cmd-function #'rmsbolt--lisp-compile-cmd))
+                          :compile-cmd-function #'beardbolt--lisp-compile-cmd))
    (rust-mode
-    . ,(make-rmsbolt-lang :compile-cmd "rustc"
+    . ,(make-beardbolt-lang :compile-cmd "rustc"
                           :supports-asm t
                           :supports-disass nil
                           :objdumper 'objdump
                           :demangler "rustfilt"
-                          :compile-cmd-function #'rmsbolt--rust-compile-cmd))
+                          :compile-cmd-function #'beardbolt--rust-compile-cmd))
    ;; Copy of above
    (rustic-mode
-    . ,(make-rmsbolt-lang :compile-cmd "rustc"
+    . ,(make-beardbolt-lang :compile-cmd "rustc"
                           :supports-asm t
                           :supports-disass nil
                           :objdumper 'objdump
                           :demangler "rustfilt"
-                          :compile-cmd-function #'rmsbolt--rust-compile-cmd))
+                          :compile-cmd-function #'beardbolt--rust-compile-cmd))
    (ponylang-mode
-    . ,(make-rmsbolt-lang :compile-cmd "ponyc"
+    . ,(make-beardbolt-lang :compile-cmd "ponyc"
                           :supports-asm t
                           :supports-disass t
                           :objdumper 'objdump
-                          :compile-cmd-function #'rmsbolt--pony-compile-cmd))
+                          :compile-cmd-function #'beardbolt--pony-compile-cmd))
    (php-mode
-    . ,(make-rmsbolt-lang :compile-cmd #'rmsbolt--php-default-compile-cmd
+    . ,(make-beardbolt-lang :compile-cmd #'beardbolt--php-default-compile-cmd
                           :supports-asm t
                           :supports-disass nil
-                          :compile-cmd-function #'rmsbolt--php-compile-cmd
-                          :process-asm-custom-fn #'rmsbolt--process-php-bytecode))
+                          :compile-cmd-function #'beardbolt--php-compile-cmd
+                          :process-asm-custom-fn #'beardbolt--process-php-bytecode))
    ;; ONLY SUPPORTS PYTHON 3
    (python-mode
-    . ,(make-rmsbolt-lang :compile-cmd "python3"
+    . ,(make-beardbolt-lang :compile-cmd "python3"
                           :supports-asm t
                           :supports-disass nil
-                          :compile-cmd-function #'rmsbolt--py-compile-cmd
-                          :process-asm-custom-fn #'rmsbolt--process-python-bytecode))
+                          :compile-cmd-function #'beardbolt--py-compile-cmd
+                          :process-asm-custom-fn #'beardbolt--process-python-bytecode))
    (haskell-mode
-    . ,(make-rmsbolt-lang :compile-cmd "ghc"
+    . ,(make-beardbolt-lang :compile-cmd "ghc"
                           :supports-asm t
                           :supports-disass nil
                           :demangler "haskell-demangler"
-                          :compile-cmd-function #'rmsbolt--hs-compile-cmd))
+                          :compile-cmd-function #'beardbolt--hs-compile-cmd))
    (java-mode
-    . ,(make-rmsbolt-lang :compile-cmd "javac"
+    . ,(make-beardbolt-lang :compile-cmd "javac"
                           :supports-asm t
                           :supports-disass nil
                           :objdumper 'cat
-                          :compile-cmd-function #'rmsbolt--java-compile-cmd
-                          :process-asm-custom-fn #'rmsbolt--process-java-bytecode))
+                          :compile-cmd-function #'beardbolt--java-compile-cmd
+                          :process-asm-custom-fn #'beardbolt--process-java-bytecode))
    (emacs-lisp-mode
-    . ,(make-rmsbolt-lang :supports-asm t
+    . ,(make-beardbolt-lang :supports-asm t
                           :supports-disass nil
                           ;; Nop
                           :process-asm-custom-fn (lambda (_src-buffer lines)
                                                    lines)
-                          :elisp-compile-override #'rmsbolt--elisp-compile-override))
+                          :elisp-compile-override #'beardbolt--elisp-compile-override))
    (nim-mode
-    . ,(make-rmsbolt-lang :compile-cmd "nim c"
+    . ,(make-beardbolt-lang :compile-cmd "nim c"
                           :supports-disass t
                           :objdumper 'objdump
                           :demangler "c++filt"
-                          :compile-cmd-function #'rmsbolt--nim-compile-cmd
-                          :disass-hidden-funcs rmsbolt--hidden-func-c))
+                          :compile-cmd-function #'beardbolt--nim-compile-cmd
+                          :disass-hidden-funcs beardbolt--hidden-func-c))
    (zig-mode
-    . ,(make-rmsbolt-lang :compile-cmd "zig build-obj -O ReleaseFast"
+    . ,(make-beardbolt-lang :compile-cmd "zig build-obj -O ReleaseFast"
                           :supports-asm t
                           :supports-disass t
                           :objdumper 'objdump
-                          :compile-cmd-function #'rmsbolt--zig-compile-cmd
-                          :disass-hidden-funcs rmsbolt--hidden-func-zig))
+                          :compile-cmd-function #'beardbolt--zig-compile-cmd
+                          :disass-hidden-funcs beardbolt--hidden-func-zig))
    (go-mode
-    . ,(make-rmsbolt-lang :compile-cmd "go"
+    . ,(make-beardbolt-lang :compile-cmd "go"
 			                    :supports-asm nil
 			                    :supports-disass t
 			                    :objdumper 'go-objdump
-			                    :compile-cmd-function #'rmsbolt--go-compile-cmd
-			                    :process-asm-custom-fn #'rmsbolt--process-go-asm-lines))
+			                    :compile-cmd-function #'beardbolt--go-compile-cmd
+			                    :process-asm-custom-fn #'beardbolt--process-go-asm-lines))
    (swift-mode
-    . ,(make-rmsbolt-lang :compile-cmd (rmsbolt--path-to-swift-compiler)
+    . ,(make-beardbolt-lang :compile-cmd (beardbolt--path-to-swift-compiler)
                           :supports-asm t
                           :supports-disass nil
                           :objdumper 'objdump
-                          :demangler (rmsbolt--path-to-swift-demangler)
-                          :compile-cmd-function #'rmsbolt--swift-compile-cmd))
+                          :demangler (beardbolt--path-to-swift-demangler)
+                          :compile-cmd-function #'beardbolt--swift-compile-cmd))
    ))
-(make-obsolete-variable 'rmsbolt-languages
-                        'rmsbolt-language-descriptor "RMSBolt-0.2")
+(make-obsolete-variable 'beardbolt-languages
+                        'beardbolt-language-descriptor "beardbolt-0.2")
 
-(defvar-local rmsbolt-language-descriptor nil
-  ;; FIXME: Major modes can't set this without calling `make-rmsbolt-lang',
-  ;; so it forces them to require `rmsbolt', which is a bummer.
-  "Description of the language tools of current buffer for use by RMSBolt.
-This should be an object of type `rmsbolt-lang', normally set by the major mode")
+(defvar-local beardbolt-language-descriptor nil
+  ;; FIXME: Major modes can't set this without calling `make-beardbolt-lang',
+  ;; so it forces them to require `beardbolt', which is a bummer.
+  "Description of the language tools of current buffer for use by beardbolt.
+This should be an object of type `beardbolt-lang', normally set by the major mode")
 
 ;;;; Macros
 
-(defmacro rmsbolt-with-display-buffer-no-window (&rest body)
+(defmacro beardbolt-with-display-buffer-no-window (&rest body)
   "Run BODY without displaying any window."
   ;; See http://debbugs.gnu.org/13594
   `(let ((display-buffer-overriding-action
-          (if rmsbolt-hide-compile
+          (if beardbolt-hide-compile
               (list #'display-buffer-no-window)
             display-buffer-overriding-action)))
      ,@body))
@@ -981,7 +981,7 @@ This should be an object of type `rmsbolt-lang', normally set by the major mode"
 ;;;; Functions
 ;; Functions to parse and lint assembly were lifted almost directly from the compiler-explorer
 
-(defun rmsbolt-re-seq (regexp string)
+(defun beardbolt-re-seq (regexp string)
   "Get list of all REGEXP match in STRING."
   (save-match-data
     (let ((pos 0)
@@ -994,7 +994,7 @@ This should be an object of type `rmsbolt-lang', normally set by the major mode"
 ;; Prevent byte-compilation warnings for cl-print-compiled, which is imported
 ;; from cl-print
 (defvar cl-print-compiled)
-(defun rmsbolt--disassemble-file (filename out-buffer)
+(defun beardbolt--disassemble-file (filename out-buffer)
   "Disassemble an elisp FILENAME into elisp bytecode in OUT-BUFFER.
 Lifted from https://emacs.stackexchange.com/questions/35936/disassembly-of-a-bytecode-file"
   (if (not (require 'cl-print nil 'noerror))
@@ -1025,19 +1025,19 @@ Lifted from https://emacs.stackexchange.com/questions/35936/disassembly-of-a-byt
 ;; Filtering functions were more or less lifted from the godbolt compiler explorer to maintain compatiblity.
 ;; https://github.com/mattgodbolt/compiler-explorer/blob/master/lib/asm.js
 
-(defun rmsbolt--has-opcode-p (line)
+(defun beardbolt--has-opcode-p (line)
   "Check if LINE has opcodes."
   (save-match-data
-    (let* ((match (string-match rmsbolt-label-def line))
+    (let* ((match (string-match beardbolt-label-def line))
            (line (if match
                      (substring line (match-end 0))
                    line))
            (line (cl-first (split-string line (rx (1+ (any ";#")))))))
-      (if (string-match-p rmsbolt-assignment-def line)
+      (if (string-match-p beardbolt-assignment-def line)
           nil
-        (string-match-p rmsbolt-has-opcode line)))))
+        (string-match-p beardbolt-has-opcode line)))))
 
-(defun rmsbolt--find-used-labels (src-buffer asm-lines)
+(defun beardbolt--find-used-labels (src-buffer asm-lines)
   "Find used labels in ASM-LINES generated from SRC-BUFFER."
   (let ((match nil)
         (current-label nil)
@@ -1045,28 +1045,28 @@ Lifted from https://emacs.stackexchange.com/questions/35936/disassembly-of-a-byt
         (weak-usages (make-hash-table :test #'equal)))
     (dolist (line asm-lines)
       (setq line (string-trim-left line)
-            match (and (string-match rmsbolt-label-def line)
+            match (and (string-match beardbolt-label-def line)
                        (match-string 1 line)))
       (when match
         (setq current-label match))
-      (setq match (and (string-match rmsbolt-defines-global line)
+      (setq match (and (string-match beardbolt-defines-global line)
                        (match-string 1 line)))
       (when match
         (puthash match t labels-used))
       ;; When we have no line or a period started line, skip
       (unless (or (string-empty-p line)
                   (eq (elt line 0) ?.)
-                  (not (string-match-p rmsbolt-label-find line)))
-        (if (or (not (buffer-local-value 'rmsbolt-filter-directives src-buffer))
-                (rmsbolt--has-opcode-p line)
-                (string-match-p rmsbolt-defines-function line))
+                  (not (string-match-p beardbolt-label-find line)))
+        (if (or (not (buffer-local-value 'beardbolt-filter-directives src-buffer))
+                (beardbolt--has-opcode-p line)
+                (string-match-p beardbolt-defines-function line))
             ;; Add labels indescriminantly
-            (dolist (l (rmsbolt-re-seq rmsbolt-label-find line))
+            (dolist (l (beardbolt-re-seq beardbolt-label-find line))
               (puthash l t labels-used))
           (when (and current-label
-                     (or (string-match-p rmsbolt-data-defn line)
-                         (rmsbolt--has-opcode-p line)))
-            (dolist (l (rmsbolt-re-seq rmsbolt-label-find line))
+                     (or (string-match-p beardbolt-data-defn line)
+                         (beardbolt--has-opcode-p line)))
+            (dolist (l (beardbolt-re-seq beardbolt-label-find line))
               (cl-pushnew l (gethash current-label weak-usages) :test #'equal))))))
 
     (let* ((max-label-iter 10)
@@ -1089,35 +1089,35 @@ Lifted from https://emacs.stackexchange.com/questions/35936/disassembly-of-a-byt
             (setq completed t))))
       labels-used)))
 
-(defun rmsbolt--user-func-p (src-buffer func)
+(defun beardbolt--user-func-p (src-buffer func)
   "Return t if FUNC is a user function.
 Argument SRC-BUFFER source buffer."
   (let* ((lang (with-current-buffer src-buffer
-                 (rmsbolt--get-lang)))
-         (regexp (rmsbolt-l-disass-hidden-funcs lang)))
+                 (beardbolt--get-lang)))
+         (regexp (beardbolt-l-disass-hidden-funcs lang)))
     (if regexp
         (not (string-match-p regexp func))
       t)))
 
 ;; TODO godbolt does not handle disassembly with filter=off, but we should.
-(cl-defun rmsbolt--process-disassembled-lines (src-buffer asm-lines)
+(cl-defun beardbolt--process-disassembled-lines (src-buffer asm-lines)
   "Process and filter disassembled ASM-LINES from SRC-BUFFER."
   (let* ((src-file-name
-          (or (buffer-local-value 'rmsbolt--real-src-file src-buffer)
+          (or (buffer-local-value 'beardbolt--real-src-file src-buffer)
               (buffer-file-name src-buffer)))
          (result nil)
          (func nil)
          (source-linum nil)
-         (def-dir (or (buffer-local-value 'rmsbolt-default-directory src-buffer)
+         (def-dir (or (buffer-local-value 'beardbolt-default-directory src-buffer)
                       (and src-file-name
                            (file-name-directory src-file-name)))))
     (dolist (line asm-lines)
       (catch 'continue
-        (when (and (> (length result) rmsbolt-binary-asm-limit)
-                   (not (buffer-local-value 'rmsbolt-ignore-binary-limit src-buffer)))
-          (cl-return-from rmsbolt--process-disassembled-lines
+        (when (and (> (length result) beardbolt-binary-asm-limit)
+                   (not (buffer-local-value 'beardbolt-ignore-binary-limit src-buffer)))
+          (cl-return-from beardbolt--process-disassembled-lines
             '("Aborting processing due to exceeding the binary limit.")))
-        (when (string-match rmsbolt-disass-line line)
+        (when (string-match beardbolt-disass-line line)
           ;; Don't add linums from files which we aren't inspecting
           ;; If we get a non-absolute .file path, check to see if we
           ;; have a default dir. If not, treat it like we are in the
@@ -1130,46 +1130,46 @@ Argument SRC-BUFFER source buffer."
           ;; We are just setting a linum, no data here.
           (throw 'continue t))
 
-        (when (string-match rmsbolt-disass-label line)
+        (when (string-match beardbolt-disass-label line)
           (setq func (match-string 2 line))
-          (when (rmsbolt--user-func-p src-buffer func)
+          (when (beardbolt--user-func-p src-buffer func)
             (push (concat func ":") result))
           (throw 'continue t))
         (unless (and func
-                     (rmsbolt--user-func-p src-buffer func))
+                     (beardbolt--user-func-p src-buffer func))
           (throw 'continue t))
-        (when (string-match rmsbolt-disass-opcode line)
+        (when (string-match beardbolt-disass-opcode line)
           (let ((line (concat (match-string 1 line)
                               "\t" (match-string 3 line))))
             ;; Add line text property if available
             (when source-linum
               (add-text-properties 0 (length line)
-                                   `(rmsbolt-src-line ,source-linum) line))
+                                   `(beardbolt-src-line ,source-linum) line))
             (push line result))
           (throw 'continue t))))
     (nreverse result)))
 
-(cl-defun rmsbolt--process-src-asm-lines (src-buffer asm-lines)
-  (let* ((used-labels (rmsbolt--find-used-labels src-buffer asm-lines))
-         (src-file-name (or (buffer-local-value 'rmsbolt--real-src-file src-buffer)
+(cl-defun beardbolt--process-src-asm-lines (src-buffer asm-lines)
+  (let* ((used-labels (beardbolt--find-used-labels src-buffer asm-lines))
+         (src-file-name (or (buffer-local-value 'beardbolt--real-src-file src-buffer)
                             (buffer-file-name src-buffer)))
          (result nil)
          (prev-label nil)
          (source-linum nil)
          (source-file-map (make-hash-table :test #'eq))
-         (def-dir (or (buffer-local-value 'rmsbolt-default-directory src-buffer)
+         (def-dir (or (buffer-local-value 'beardbolt-default-directory src-buffer)
                       (and src-file-name
                            (file-name-directory src-file-name)))))
     (dolist (line asm-lines)
-      (let* ((raw-match (or (string-match rmsbolt-label-def line)
-                            (string-match rmsbolt-assignment-def line)))
+      (let* ((raw-match (or (string-match beardbolt-label-def line)
+                            (string-match beardbolt-assignment-def line)))
              (match (when raw-match
                       (match-string 1 line)))
              (used-label-p (gethash match used-labels)))
         (catch 'continue
           (cond
            ;; Process file name hints
-           ((string-match rmsbolt-source-file line)
+           ((string-match beardbolt-source-file line)
             (if (match-string 3 line)
                 ;; Clang style match
                 (puthash (string-to-number (match-string 1 line))
@@ -1179,7 +1179,7 @@ Argument SRC-BUFFER source buffer."
                        (match-string 2 line)
                        source-file-map)))
            ;; Process any line number hints
-           ((string-match rmsbolt-source-tag line)
+           ((string-match beardbolt-source-tag line)
             (if (or (not src-file-name) ;; Skip file match if we don't have a current filename
                     ;; If we get a non-absolute .file path, check to see if we
                     ;; have a default dir. If not, treat it like we are in the
@@ -1194,7 +1194,7 @@ Argument SRC-BUFFER source buffer."
                 (setq source-linum (string-to-number
                                     (match-string 2 line)))
               (setq source-linum nil)))
-           ((string-match rmsbolt-source-stab line)
+           ((string-match beardbolt-source-stab line)
             (pcase (string-to-number (match-string 1 line))
               ;; http://www.math.utah.edu/docs/info/stabs_11.html
               (68
@@ -1202,40 +1202,40 @@ Argument SRC-BUFFER source buffer."
               ((or 100 132)
                (setq source-linum nil)))))
           ;; End block, reset prev-label and source
-          (when (string-match-p rmsbolt-endblock line)
+          (when (string-match-p beardbolt-endblock line)
             (setq prev-label nil))
 
-          (when (and (buffer-local-value 'rmsbolt-filter-comment-only src-buffer)
-                     (string-match-p rmsbolt-comment-only line))
+          (when (and (buffer-local-value 'beardbolt-filter-comment-only src-buffer)
+                     (string-match-p beardbolt-comment-only line))
             (throw 'continue t))
 
           ;; continue means we don't add to the ouptut
           (when match
             (if (not used-label-p)
                 ;; Unused label
-                (when (buffer-local-value 'rmsbolt-filter-labels src-buffer)
+                (when (buffer-local-value 'beardbolt-filter-labels src-buffer)
                   (throw 'continue t))
               ;; Real label, set prev-label
               (setq prev-label raw-match)))
-          (when (and (buffer-local-value 'rmsbolt-filter-directives src-buffer)
+          (when (and (buffer-local-value 'beardbolt-filter-directives src-buffer)
                      (not match))
-            (if  (and (string-match-p rmsbolt-data-defn line)
+            (if  (and (string-match-p beardbolt-data-defn line)
                       prev-label)
                 ;; data is being used
                 nil
-              (when (string-match-p rmsbolt-directive line)
+              (when (string-match-p beardbolt-directive line)
                 (throw 'continue t))))
           ;; Add line numbers to mapping
           (when (and source-linum
-                     (rmsbolt--has-opcode-p line))
+                     (beardbolt--has-opcode-p line))
             (add-text-properties 0 (length line)
-                                 `(rmsbolt-src-line ,source-linum) line))
+                                 `(beardbolt-src-line ,source-linum) line))
           ;; Add line
           (push line result))))
     (nreverse result)))
 
-(cl-defun rmsbolt--process-php-bytecode (src-buffer asm-lines)
-  (if (rmsbolt--hack-p src-buffer)
+(cl-defun beardbolt--process-php-bytecode (src-buffer asm-lines)
+  (if (beardbolt--hack-p src-buffer)
       asm-lines
     (let ((state 'useless)
           (current-line nil)
@@ -1251,16 +1251,16 @@ Argument SRC-BUFFER source buffer."
             ((string-empty-p line) (setq state 'useless))
             ((string-match "^ *\\([0-9]+\\) +[0-9]+" line)
              (setq current-line (string-to-number (match-string 1 line)))
-             (add-text-properties 0 (length line) `(rmsbolt-src-line ,current-line) line))
+             (add-text-properties 0 (length line) `(beardbolt-src-line ,current-line) line))
             (t
-             (add-text-properties 0 (length line) `(rmsbolt-src-line ,current-line) line)))
+             (add-text-properties 0 (length line) `(beardbolt-src-line ,current-line) line)))
            (push line result))
           (otherwise
            (when (string-match "^filename:" line)
              (setq state 'text)))))
       (nreverse result))))
 
-(cl-defun rmsbolt--process-python-bytecode (_src-buffer asm-lines)
+(cl-defun beardbolt--process-python-bytecode (_src-buffer asm-lines)
   (let ((source-linum nil)
         (result nil))
     (dolist (line asm-lines)
@@ -1287,34 +1287,34 @@ Argument SRC-BUFFER source buffer."
                               "\t"))
         (when source-linum
           (add-text-properties 0 (length line)
-                               `(rmsbolt-src-line ,source-linum) line))
+                               `(beardbolt-src-line ,source-linum) line))
         ;; Add line
         (push line result)))
     (nreverse result)))
 
-(defun rmsbolt--process-java-bytecode (src-buffer asm-lines)
-  "Wrapper for easy integration into rmsbolt.
+(defun beardbolt--process-java-bytecode (src-buffer asm-lines)
+  "Wrapper for easy integration into beardbolt.
 Argument SRC-BUFFER source buffer.
 Argument ASM-LINES input lines."
-  (rmsbolt-java-process-bytecode
+  (beardbolt-java-process-bytecode
    asm-lines
-   (buffer-local-value 'rmsbolt-filter-directives src-buffer)))
+   (buffer-local-value 'beardbolt-filter-directives src-buffer)))
 
-(cl-defun rmsbolt--process-asm-lines (src-buffer asm-lines)
+(cl-defun beardbolt--process-asm-lines (src-buffer asm-lines)
   "Process and filter a set of asm lines."
   (let* ((lang (with-current-buffer src-buffer
-                 (rmsbolt--get-lang)))
+                 (beardbolt--get-lang)))
          (process-asm-fn (when lang
-                           (rmsbolt-l-process-asm-custom-fn lang))))
+                           (beardbolt-l-process-asm-custom-fn lang))))
     (cond
      (process-asm-fn
       (funcall process-asm-fn src-buffer asm-lines))
-     ((buffer-local-value 'rmsbolt-disassemble src-buffer)
-      (rmsbolt--process-disassembled-lines src-buffer asm-lines))
+     ((buffer-local-value 'beardbolt-disassemble src-buffer)
+      (beardbolt--process-disassembled-lines src-buffer asm-lines))
      (t
-      (rmsbolt--process-src-asm-lines src-buffer asm-lines)))))
+      (beardbolt--process-src-asm-lines src-buffer asm-lines)))))
 
-(cl-defun rmsbolt--process-go-asm-lines (_src-buffer asm-lines)
+(cl-defun beardbolt--process-go-asm-lines (_src-buffer asm-lines)
   (let ((source-linum nil)
         (result nil))
     (dolist (line asm-lines)
@@ -1340,12 +1340,12 @@ Argument ASM-LINES input lines."
                               "\t"))
         (when source-linum
           (add-text-properties 0 (length line)
-                               `(rmsbolt-src-line ,source-linum) line))
+                               `(beardbolt-src-line ,source-linum) line))
         ;; Add line
         (push line result)))
     (nreverse result)))
 
-(defun rmsbolt--rainbowize (line-mappings src-buffer)
+(defun beardbolt--rainbowize (line-mappings src-buffer)
   (let* ((background-hsl
           (apply #'color-rgb-to-hsl (color-name-to-rgb (face-background 'default))))
          all-ovs
@@ -1386,44 +1386,44 @@ Argument ASM-LINES input lines."
                 (overlay-put ov 'priority 0)))))))
      line-mappings)
     (with-current-buffer src-buffer
-      (mapc #'delete-overlay rmsbolt--rainbow-overlays)
-      (setq-local rmsbolt--rainbow-overlays all-ovs))))
+      (mapc #'delete-overlay beardbolt--rainbow-overlays)
+      (setq-local beardbolt--rainbow-overlays all-ovs))))
 
-(defun rmsbolt--rainbowize-cleanup ()
-  (mapc #'delete-overlay rmsbolt--rainbow-overlays)
-  (setq rmsbolt--rainbow-overlays nil))
+(defun beardbolt--rainbowize-cleanup ()
+  (mapc #'delete-overlay beardbolt--rainbow-overlays)
+  (setq beardbolt--rainbow-overlays nil))
 
 ;;;;; Handlers
-(cl-defun rmsbolt--handle-finish-compile (buffer str &key override-buffer stopped)
+(cl-defun beardbolt--handle-finish-compile (buffer str &key override-buffer stopped)
   "Finish hook for compilations.
 Argument BUFFER compilation buffer.
 Argument STR compilation finish status.
 Argument OVERRIDE-BUFFER asm src buffer to use instead of reading
-   `rmsbolt-output-filename'.
+   `beardbolt-output-filename'.
 Argument STOPPED The compilation was stopped to start another compilation."
   (when (not (buffer-live-p buffer))
-    (error "Dead buffer passed to compilation-finish-function! RMSBolt cannot continue."))
+    (error "Dead buffer passed to compilation-finish-function! beardbolt cannot continue."))
   (let ((compilation-fail
          (and str
               (not (string-match "^finished" str))))
         (default-directory (buffer-local-value 'default-directory buffer))
-        (src-buffer (buffer-local-value 'rmsbolt-src-buffer buffer)))
+        (src-buffer (buffer-local-value 'beardbolt-src-buffer buffer)))
 
-    (with-current-buffer (get-buffer-create rmsbolt-output-buffer)
+    (with-current-buffer (get-buffer-create beardbolt-output-buffer)
       ;; Store src buffer value for later linking
       (cond (stopped) ; Do nothing
             ((not compilation-fail)
              (if (and (not override-buffer)
-                      (not (file-exists-p (rmsbolt-output-filename src-buffer t))))
+                      (not (file-exists-p (beardbolt-output-filename src-buffer t))))
                  (message "Error reading from output file.")
                (let ((lines
-                      (rmsbolt--process-asm-lines
+                      (beardbolt--process-asm-lines
                        src-buffer
                        (or (when override-buffer
                              (with-current-buffer override-buffer
                                (split-string (buffer-string) "\n" nil)))
                            (with-temp-buffer
-                             (insert-file-contents (rmsbolt-output-filename src-buffer t))
+                             (insert-file-contents (beardbolt-output-filename src-buffer t))
                              (split-string (buffer-string) "\n" nil)))))
                      (ht (make-hash-table :test #'eq))
                      (linum 1)
@@ -1434,7 +1434,7 @@ Argument STOPPED The compilation was stopped to start another compilation."
                  (dolist (line lines)
                    (let ((property
                           (get-text-property
-                           0 'rmsbolt-src-line line)))
+                           0 'beardbolt-src-line line)))
                      (progn
                        (cl-tagbody
                         run-conditional
@@ -1454,7 +1454,7 @@ Argument STOPPED The compilation was stopped to start another compilation."
                                 start-match linum))))))
                    (cl-incf linum))
                  (with-current-buffer src-buffer
-                   (setq rmsbolt-line-mapping ht))
+                   (setq beardbolt-line-mapping ht))
                  ;; Replace buffer contents but save point and scroll
                  (let* ((window (get-buffer-window output-buffer))
                         (old-point (window-point window))
@@ -1465,8 +1465,8 @@ Argument STOPPED The compilation was stopped to start another compilation."
                      (set-window-start window old-window-start)
                      (set-window-point window old-point)))
                  (asm-mode)
-                 (rmsbolt-mode 1)
-                 ;; Enrich rmsbolt-line-mapping with actual position information
+                 (beardbolt-mode 1)
+                 ;; Enrich beardbolt-line-mapping with actual position information
                  (maphash (lambda (_k asm-regions)
                             (save-excursion
                               (plist-put
@@ -1483,110 +1483,110 @@ Argument STOPPED The compilation was stopped to start another compilation."
                                                 (line-end-position)))))))
                           ht)
                  
-                 (rmsbolt--rainbowize ht src-buffer)
-                 (setq rmsbolt-src-buffer src-buffer)
+                 (beardbolt--rainbowize ht src-buffer)
+                 (setq beardbolt-src-buffer src-buffer)
                  (display-buffer (current-buffer) '(nil (inhibit-same-window . t)))
-                 (run-at-time 0 nil #'rmsbolt-update-overlays))))
+                 (run-at-time 0 nil #'beardbolt-update-overlays))))
             (t ; Compilation failed
              ;; Display compilation buffer
              (display-buffer buffer '(nil (inhibit-same-window . t)))
              ;; TODO find a cleaner way to disable overlays.
              (with-current-buffer src-buffer
-               (setq rmsbolt-line-mapping nil))
-             (rmsbolt--remove-overlays)))
+               (setq beardbolt-line-mapping nil))
+             (beardbolt--remove-overlays)))
       ;; Reset automated recompile
-      (setq rmsbolt--automated-compile nil))
+      (setq beardbolt--automated-compile nil))
     ;; Clear out default-set variables
     (with-current-buffer src-buffer
-      (dolist (var rmsbolt--default-variables)
-        (rmsbolt--set-local var nil))
-      (setq rmsbolt--default-variables nil))))
+      (dolist (var beardbolt--default-variables)
+        (beardbolt--set-local var nil))
+      (setq beardbolt--default-variables nil))))
 
 ;;;;; Parsing Options
-(defun rmsbolt--get-lang ()
+(defun beardbolt--get-lang ()
   "Helper function to get lang def for LANGUAGE."
-  (or rmsbolt-language-descriptor
-      (cdr-safe (assoc major-mode rmsbolt-languages))))
+  (or beardbolt-language-descriptor
+      (cdr-safe (assoc major-mode beardbolt-languages))))
 
-(defun rmsbolt--parse-options ()
+(defun beardbolt--parse-options ()
   "Parse RMS options from file."
   (hack-local-variables)
-  (let* ((lang (rmsbolt--get-lang))
+  (let* ((lang (beardbolt--get-lang))
          (src-buffer (current-buffer))
-         (cmd rmsbolt-command)
-         (dir rmsbolt-default-directory)
-         (force-disass (not (rmsbolt-l-supports-asm lang)))
-         (force-asm (not (rmsbolt-l-supports-disass lang))))
+         (cmd beardbolt-command)
+         (dir beardbolt-default-directory)
+         (force-disass (not (beardbolt-l-supports-asm lang)))
+         (force-asm (not (beardbolt-l-supports-disass lang))))
     ;; If this is non-nil, most likely we are running two compiles at once.
     ;; This is not exactly ideal, as it causes a race condition.
-    (when rmsbolt--default-variables
-      (message "It looks like RMSbolt state wasn't cleaned up properly.
+    (when beardbolt--default-variables
+      (message "It looks like beardbolt state wasn't cleaned up properly.
 Are you running two compilations at the same time?"))
     (when (and force-disass force-asm)
       (error "No disassemble method found for this langauge, please double check spec"))
     (when force-disass
-      (setq-local rmsbolt-disassemble t))
+      (setq-local beardbolt-disassemble t))
     (when force-asm
-      (setq-local rmsbolt-disassemble nil))
+      (setq-local beardbolt-disassemble nil))
     (when (not dir)
-      (add-to-list 'rmsbolt--default-variables 'rmsbolt-default-directory)
-      (setq-local rmsbolt-default-directory
-                  (let ((new-dir (rmsbolt-l-default-directory lang)))
+      (add-to-list 'beardbolt--default-variables 'beardbolt-default-directory)
+      (setq-local beardbolt-default-directory
+                  (let ((new-dir (beardbolt-l-default-directory lang)))
                     (pcase new-dir
                       ((pred functionp) (funcall new-dir src-buffer))
                       (_ new-dir)))))
     (when (not cmd)
-      (add-to-list 'rmsbolt--default-variables 'rmsbolt-command)
-      (setq-local rmsbolt-command
-                  (let ((new-cmd (rmsbolt-l-compile-cmd lang)))
+      (add-to-list 'beardbolt--default-variables 'beardbolt-command)
+      (setq-local beardbolt-command
+                  (let ((new-cmd (beardbolt-l-compile-cmd lang)))
                     (pcase new-cmd
                       ((pred functionp) (funcall new-cmd src-buffer))
                       (_ new-cmd)))))
     src-buffer))
 
-(defun rmsbolt--demangle-command (existing-cmd lang src-buffer)
+(defun beardbolt--demangle-command (existing-cmd lang src-buffer)
   "Append a demangler routine to EXISTING-CMD with LANG and SRC-BUFFER
 and return it."
-  (if-let ((to-demangle (buffer-local-value 'rmsbolt-demangle src-buffer))
-           (demangler (rmsbolt-l-demangler lang))
+  (if-let ((to-demangle (buffer-local-value 'beardbolt-demangle src-buffer))
+           (demangler (beardbolt-l-demangler lang))
            (demangler-exists (executable-find demangler)))
       (concat existing-cmd " "
               (mapconcat
                #'identity
                (list "&&" demangler
-                     "<" (rmsbolt-output-filename src-buffer t)
-                     ">" (expand-file-name "tmp.s" rmsbolt--temp-dir)
+                     "<" (beardbolt-output-filename src-buffer t)
+                     ">" (expand-file-name "tmp.s" beardbolt--temp-dir)
                      "&&" "mv"
-                     (expand-file-name "tmp.s" rmsbolt--temp-dir)
-                     (rmsbolt-output-filename src-buffer t))
+                     (expand-file-name "tmp.s" beardbolt--temp-dir)
+                     (beardbolt-output-filename src-buffer t))
                " "))
     existing-cmd))
 
 ;;;;; UI Functions
-(defun rmsbolt-compile ()
-  "Compile the current rmsbolt buffer."
+(defun beardbolt-compile ()
+  "Compile the current beardbolt buffer."
   (interactive)
   (when (and (buffer-modified-p)
              (yes-or-no-p (format "Save buffer %s? " (buffer-name))))
     (save-buffer))
-  (rmsbolt--gen-temp)
+  (beardbolt--gen-temp)
   ;; Current buffer = src-buffer at this point
-  (setq rmsbolt-src-buffer (current-buffer))
+  (setq beardbolt-src-buffer (current-buffer))
   (cond
    ((eq major-mode 'asm-mode)
     ;; We cannot compile asm-mode files
     (message "Cannot compile assembly files. Are you sure you are not in the output buffer?"))
-   ((rmsbolt-l-elisp-compile-override (rmsbolt--get-lang))
+   ((beardbolt-l-elisp-compile-override (beardbolt--get-lang))
     (with-current-buffer (or (buffer-base-buffer) (current-buffer))
       (funcall
-       (rmsbolt-l-elisp-compile-override (rmsbolt--get-lang))
+       (beardbolt-l-elisp-compile-override (beardbolt--get-lang))
        :src-buffer (current-buffer))))
    (t
-    (rmsbolt--stop-running-compilation)
-    (rmsbolt--parse-options)
+    (beardbolt--stop-running-compilation)
+    (beardbolt--parse-options)
     (let* ((src-buffer (current-buffer))
-           (lang (rmsbolt--get-lang))
-           (func (rmsbolt-l-compile-cmd-function lang))
+           (lang (beardbolt--get-lang))
+           (func (beardbolt-l-compile-cmd-function lang))
            ;; Generate command
            (cmd
             ;; Compilation commands assume the current buffer is a real file
@@ -1594,24 +1594,24 @@ and return it."
             (with-current-buffer (or (buffer-base-buffer) (current-buffer))
               (funcall func :src-buffer src-buffer)))
            (asm-format
-            (buffer-local-value 'rmsbolt-asm-format src-buffer))
-           (default-directory (or rmsbolt-default-directory
-                                  rmsbolt--temp-dir)))
-      (run-hooks 'rmsbolt-after-parse-hook)
-      (rmsbolt--rainbowize-cleanup)
-      (when (buffer-local-value 'rmsbolt-disassemble src-buffer)
+            (buffer-local-value 'beardbolt-asm-format src-buffer))
+           (default-directory (or beardbolt-default-directory
+                                  beardbolt--temp-dir)))
+      (run-hooks 'beardbolt-after-parse-hook)
+      (beardbolt--rainbowize-cleanup)
+      (when (buffer-local-value 'beardbolt-disassemble src-buffer)
         (pcase
-            (rmsbolt-l-objdumper lang)
+            (beardbolt-l-objdumper lang)
           ('objdump
            (setq cmd
                  (mapconcat #'identity
                             (list cmd
                                   "&&"
-                                  rmsbolt-objdump-binary "-d" (rmsbolt-output-filename src-buffer)
+                                  beardbolt-objdump-binary "-d" (beardbolt-output-filename src-buffer)
                                   "-C" "--insn-width=16" "-l"
                                   (when (not (booleanp asm-format))
                                     (concat "-M " asm-format))
-                                  ">" (rmsbolt-output-filename src-buffer t))
+                                  ">" (beardbolt-output-filename src-buffer t))
                             " ")))
           ('go-objdump
            (setq cmd
@@ -1619,129 +1619,129 @@ and return it."
                             (list cmd
                                   "&&"
                                   "go" "tool"
-                                  "objdump" (rmsbolt-output-filename src-buffer)
-                                  ">" (rmsbolt-output-filename src-buffer t))
+                                  "objdump" (beardbolt-output-filename src-buffer)
+                                  ">" (beardbolt-output-filename src-buffer t))
                             " ")))
           ('cat
            (setq cmd
                  (mapconcat #'identity
                             (list cmd
                                   "&&" "mv"
-                                  (rmsbolt-output-filename src-buffer)
-                                  (rmsbolt-output-filename src-buffer t))
+                                  (beardbolt-output-filename src-buffer)
+                                  (beardbolt-output-filename src-buffer t))
                             " ")))
           (_
            (error "Objdumper not recognized"))))
       ;; Convert to demangle if we need to
-      (setq cmd (rmsbolt--demangle-command cmd lang src-buffer))
+      (setq cmd (beardbolt--demangle-command cmd lang src-buffer))
       (with-current-buffer ; With compilation buffer
-          (let ((shell-file-name (or (executable-find rmsbolt--shell)
+          (let ((shell-file-name (or (executable-find beardbolt--shell)
                                      shell-file-name))
                 (compilation-auto-jump-to-first-error t))
             ;; TODO should this be configurable?
-            (rmsbolt-with-display-buffer-no-window
-             (compilation-start cmd nil (lambda (&rest _) "*rmsbolt-compilation*"))))
+            (beardbolt-with-display-buffer-no-window
+             (compilation-start cmd nil (lambda (&rest _) "*beardbolt-compilation*"))))
         ;; Only jump to errors, skip over warnings
         (setq-local compilation-skip-threshold 2)
         (add-hook 'compilation-finish-functions
-                  #'rmsbolt--handle-finish-compile nil t)
-        (setq rmsbolt-src-buffer src-buffer))))))
+                  #'beardbolt--handle-finish-compile nil t)
+        (setq beardbolt-src-buffer src-buffer))))))
 
-(defun rmsbolt--stop-running-compilation ()
-  (when-let* ((compilation-buffer (get-buffer "*rmsbolt-compilation*"))
+(defun beardbolt--stop-running-compilation ()
+  (when-let* ((compilation-buffer (get-buffer "*beardbolt-compilation*"))
               (proc (get-buffer-process compilation-buffer)))
     (when (eq (process-status proc) 'run)
       (set-process-sentinel proc nil)
       (interrupt-process proc)
-      (rmsbolt--handle-finish-compile compilation-buffer nil :stopped t)
+      (beardbolt--handle-finish-compile compilation-buffer nil :stopped t)
       ;; Wait a short while for the process to exit cleanly
       (sit-for 0.2)
       (delete-process proc))))
 
 ;;;; Keymap
-(defvar rmsbolt-mode-map
+(defvar beardbolt-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-c C-c") #'rmsbolt-compile)
+    (define-key map (kbd "C-c C-c") #'beardbolt-compile)
     map)
-  "Keymap for function `rmsbolt-mode'.")
+  "Keymap for function `beardbolt-mode'.")
 
 ;;;; Init commands
 
-(defun rmsbolt--gen-temp ()
-  "Generate rmsbolt temp dir if needed."
-  (unless (and rmsbolt--temp-dir
-               (file-exists-p rmsbolt--temp-dir))
-    (setq rmsbolt--temp-dir
-          (make-temp-file "rmsbolt-" t))
+(defun beardbolt--gen-temp ()
+  "Generate beardbolt temp dir if needed."
+  (unless (and beardbolt--temp-dir
+               (file-exists-p beardbolt--temp-dir))
+    (setq beardbolt--temp-dir
+          (make-temp-file "beardbolt-" t))
     (add-hook 'kill-emacs-hook
               (lambda ()
-                (when (and (boundp 'rmsbolt--temp-dir)
-                           rmsbolt--temp-dir
-                           (file-directory-p rmsbolt--temp-dir))
-                  (delete-directory rmsbolt--temp-dir t))
-                (setq rmsbolt--temp-dir nil)))))
+                (when (and (boundp 'beardbolt--temp-dir)
+                           beardbolt--temp-dir
+                           (file-directory-p beardbolt--temp-dir))
+                  (delete-directory beardbolt--temp-dir t))
+                (setq beardbolt--temp-dir nil)))))
 
 ;;;;; Starter Definitions
 
-;; IIUC, this "starter" business is not a necessary part of RMSBolt, but is
-;; a way to provide sample files with which users can try out RMSBolt.
+;; IIUC, this "starter" business is not a necessary part of beardbolt, but is
+;; a way to provide sample files with which users can try out beardbolt.
 
-(defvar rmsbolt-starter-files
-  '(("c" . "rmsbolt.c")
-    ("c++" . "rmsbolt.cpp")
-    ("ocaml" . "rmsbolt.ml")
-    ("cl" . "rmsbolt.lisp")
-    ("rust " . "rmsbolt.rs")
-    ("python" . "rmsbolt.py")
-    ("haskell" . "rmsbolt.hs")
-    ("php" . "rmsbolt.php")
-    ("pony" . "rmsbolt.pony")
-    ("emacs-lisp" . "rmsbolt-starter.el")
-    ("d" . "rmsbolt.d")
-    ("zig" . "rmsbolt.zig")
-    ("go" . "rmsbolt.go")
-    ("swift" . "rmsbolt.swift")
-    ;; Rmsbolt is capitalized here because of Java convention of Capitalized
+(defvar beardbolt-starter-files
+  '(("c" . "beardbolt.c")
+    ("c++" . "beardbolt.cpp")
+    ("ocaml" . "beardbolt.ml")
+    ("cl" . "beardbolt.lisp")
+    ("rust " . "beardbolt.rs")
+    ("python" . "beardbolt.py")
+    ("haskell" . "beardbolt.hs")
+    ("php" . "beardbolt.php")
+    ("pony" . "beardbolt.pony")
+    ("emacs-lisp" . "beardbolt-starter.el")
+    ("d" . "beardbolt.d")
+    ("zig" . "beardbolt.zig")
+    ("go" . "beardbolt.go")
+    ("swift" . "beardbolt.swift")
+    ;; beardbolt is capitalized here because of Java convention of Capitalized
     ;; class names.
-    ("java" . "Rmsbolt.java")))
+    ("java" . "beardbolt.java")))
 
 ;;;###autoload
-(defun rmsbolt-starter (lang-name)
+(defun beardbolt-starter (lang-name)
   "Setup new file based on the sample STARTER-FILE-NAME."
   (interactive
-   (list (completing-read "Language: " rmsbolt-starter-files nil t)))
-  (rmsbolt--gen-temp)
-  (let* ((starter-file-name (cdr (assoc lang-name rmsbolt-starter-files)))
+   (list (completing-read "Language: " beardbolt-starter-files nil t)))
+  (beardbolt--gen-temp)
+  (let* ((starter-file-name (cdr (assoc lang-name beardbolt-starter-files)))
          (file-name
-          (expand-file-name starter-file-name rmsbolt--temp-dir))
+          (expand-file-name starter-file-name beardbolt--temp-dir))
          (exists (file-exists-p file-name))
          (src-file-name
-          (when rmsbolt-dir
+          (when beardbolt-dir
             (expand-file-name starter-file-name
-                              (expand-file-name "starters/" rmsbolt-dir))))
+                              (expand-file-name "starters/" beardbolt-dir))))
          (src-file-exists (when src-file-name
                             (file-exists-p src-file-name))))
     (if (not src-file-exists)
-        (error "Could not find starter files! Are you sure the starter/ folder is available? If you want to overide, set `rmsbolt-dir' to your install path")
+        (error "Could not find starter files! Are you sure the starter/ folder is available? If you want to overide, set `beardbolt-dir' to your install path")
       (unless exists
         (copy-file src-file-name file-name))
       (find-file file-name)
-      (unless rmsbolt-mode
-        (rmsbolt-mode 1)))))
+      (unless beardbolt-mode
+        (beardbolt-mode 1)))))
 
 ;;;; Overlay Commands
-(defun rmsbolt--goto-line (line)
+(defun beardbolt--goto-line (line)
   "Goto a certain LINE."
   (when line
     (let ((cur (line-number-at-pos)))
       (forward-line (- line cur)))))
-(defun rmsbolt--setup-overlay (start end buf)
+(defun beardbolt--setup-overlay (start end buf)
   "Setup overlay with START and END in BUF."
   (let ((o (make-overlay start end buf)))
-    (overlay-put o 'face 'rmsbolt-current-line-face)
+    (overlay-put o 'face 'beardbolt-current-line-face)
     (overlay-put o 'priority 1)
     o))
-(cl-defun rmsbolt--point-visible (point)
+(cl-defun beardbolt--point-visible (point)
   "Check if the current point is visible in a window in the current buffer."
   (when (cl-find-if (lambda (w)
                       (and (>= point (window-start w))
@@ -1749,26 +1749,26 @@ and return it."
                     (get-buffer-window-list))
     t))
 
-(cl-defun rmsbolt-update-overlays (&key (force nil))
+(cl-defun beardbolt-update-overlays (&key (force nil))
   "Update overlays to highlight the currently selected source and asm lines.
   If FORCE, always scroll overlay, even when one is visible.
   FORCE also scrolls to the first line, instead of the first line
   of the last block."
-  (when rmsbolt-mode
-    (if-let ((should-run rmsbolt-use-overlays)
-             (output-buffer (get-buffer rmsbolt-output-buffer))
-             (src-buffer (buffer-local-value 'rmsbolt-src-buffer output-buffer))
+  (when beardbolt-mode
+    (if-let ((should-run beardbolt-use-overlays)
+             (output-buffer (get-buffer beardbolt-output-buffer))
+             (src-buffer (buffer-local-value 'beardbolt-src-buffer output-buffer))
              (should-run (and (or (eq (current-buffer) src-buffer)
                                   (eq (current-buffer) output-buffer))
                               ;; Don't run on unsaved buffers
                               (not (buffer-modified-p src-buffer))
-                              (buffer-local-value 'rmsbolt-mode src-buffer)))
+                              (buffer-local-value 'beardbolt-mode src-buffer)))
              (current-line (line-number-at-pos))
              (src-current-line
               (if (eq (current-buffer) src-buffer)
                   current-line
-                (get-text-property (point) 'rmsbolt-src-line)))
-             (line-mappings (buffer-local-value 'rmsbolt-line-mapping src-buffer))
+                (get-text-property (point) 'beardbolt-src-line)))
+             (line-mappings (buffer-local-value 'beardbolt-line-mapping src-buffer))
              (asm-region-plist (gethash src-current-line line-mappings))
              (asm-region-lines (plist-get asm-region-plist :lines))
              (asm-region-positions (plist-get asm-region-plist :positions))
@@ -1776,23 +1776,23 @@ and return it."
              (src-pts
               (with-current-buffer src-buffer
                 (save-excursion
-                  (rmsbolt--goto-line src-current-line)
+                  (beardbolt--goto-line src-current-line)
                   (cl-values (c-point 'bol) (c-point 'bonl))))))
         (let*
             ;; If nil, output-buffer is scrolled instead
             ((scroll-src-buffer-p (not (eq (current-buffer) src-buffer)))
-             (line-visible (or (not rmsbolt-goto-match)
+             (line-visible (or (not beardbolt-goto-match)
                                (when scroll-src-buffer-p
                                  (with-current-buffer src-buffer
-                                   (rmsbolt--point-visible (cl-first src-pts)))))))
+                                   (beardbolt--point-visible (cl-first src-pts)))))))
           ;; Remove existing overlays
-          (rmsbolt--remove-overlays)
-          (push (rmsbolt--setup-overlay (cl-first src-pts) (cl-second src-pts) src-buffer)
-                rmsbolt-overlays)
+          (beardbolt--remove-overlays)
+          (push (beardbolt--setup-overlay (cl-first src-pts) (cl-second src-pts) src-buffer)
+                beardbolt-overlays)
           (with-current-buffer output-buffer
             (cl-loop for (start . end) in asm-region-positions
-                     do (push (rmsbolt--setup-overlay start end output-buffer)
-                              rmsbolt-overlays))
+                     do (push (beardbolt--setup-overlay start end output-buffer)
+                              beardbolt-overlays))
             (when (or (not line-visible) force)
               ;; Scroll buffer to first line
               (when-let ((scroll-buffer (if scroll-src-buffer-p
@@ -1807,62 +1807,62 @@ and return it."
                                                (car (last asm-region-lines))
                                              (cl-first asm-region-lines))))))
                 (with-selected-window window
-                  (rmsbolt--goto-line line-scroll)
+                  (beardbolt--goto-line line-scroll)
                   ;; If we scrolled, recenter
                   (recenter))))))
-      (rmsbolt--remove-overlays))
-    ;; If not in rmsbolt-mode, don't do anything
+      (beardbolt--remove-overlays))
+    ;; If not in beardbolt-mode, don't do anything
     ))
 
-(defun rmsbolt--remove-overlays ()
+(defun beardbolt--remove-overlays ()
   "Clean up overlays, assuming they are no longer needed."
-  (mapc #'delete-overlay rmsbolt-overlays)
-  (setq rmsbolt-overlays nil))
+  (mapc #'delete-overlay beardbolt-overlays)
+  (setq beardbolt-overlays nil))
 
-(defun rmsbolt--post-command-hook ()
+(defun beardbolt--post-command-hook ()
   ;; Use (point) instead of (line-number-at-pos) to track movements because
   ;; the former is faster (constant runtime)
-  (unless (eq (point) rmsbolt--last-point)
-    (setq rmsbolt--last-point (point))
-    (rmsbolt-update-overlays)))
+  (unless (eq (point) beardbolt--last-point)
+    (setq beardbolt--last-point (point))
+    (beardbolt-update-overlays)))
 
-(defun rmsbolt--on-kill-buffer ()
-  (when-let (output-buffer (get-buffer rmsbolt-output-buffer))
+(defun beardbolt--on-kill-buffer ()
+  (when-let (output-buffer (get-buffer beardbolt-output-buffer))
     (when (or (eq (current-buffer) output-buffer)
-              (eq (current-buffer) (buffer-local-value 'rmsbolt-src-buffer output-buffer)))
-      (rmsbolt--remove-overlays))))
+              (eq (current-buffer) (buffer-local-value 'beardbolt-src-buffer output-buffer)))
+      (beardbolt--remove-overlays))))
 
-(defun rmsbolt--is-active-src-buffer ()
-  (when-let (output-buffer (get-buffer rmsbolt-output-buffer))
-    (eq (current-buffer) (buffer-local-value 'rmsbolt-src-buffer output-buffer))))
+(defun beardbolt--is-active-src-buffer ()
+  (when-let (output-buffer (get-buffer beardbolt-output-buffer))
+    (eq (current-buffer) (buffer-local-value 'beardbolt-src-buffer output-buffer))))
 
-(defun rmsbolt--after-save ()
-  (when (and (rmsbolt--is-active-src-buffer)
-             rmsbolt-automatic-recompile)
-    (setq rmsbolt--automated-compile t)
-    (rmsbolt-compile)))
+(defun beardbolt--after-save ()
+  (when (and (beardbolt--is-active-src-buffer)
+             beardbolt-automatic-recompile)
+    (setq beardbolt--automated-compile t)
+    (beardbolt-compile)))
 
-;; Auto-save the src buffer after it has been unchanged for `rmsbolt-compile-delay' seconds.
-;; The buffer is then automatically recompiled via `rmsbolt--after-save'.
-(defvar rmsbolt--change-timer nil)
-(defvar rmsbolt--buffer-to-auto-save nil)
+;; Auto-save the src buffer after it has been unchanged for `beardbolt-compile-delay' seconds.
+;; The buffer is then automatically recompiled via `beardbolt--after-save'.
+(defvar beardbolt--change-timer nil)
+(defvar beardbolt--buffer-to-auto-save nil)
 
-(defun rmsbolt--after-change (&rest _)
-  (when (and (rmsbolt--is-active-src-buffer)
-             rmsbolt-automatic-recompile
-             (not (eq rmsbolt-automatic-recompile 'on-save)))
-    (when rmsbolt--change-timer
-      (cancel-timer rmsbolt--change-timer))
-    (setq rmsbolt--buffer-to-auto-save (current-buffer)
-          rmsbolt--change-timer (run-with-timer rmsbolt-compile-delay nil #'rmsbolt--on-change-timer))))
+(defun beardbolt--after-change (&rest _)
+  (when (and (beardbolt--is-active-src-buffer)
+             beardbolt-automatic-recompile
+             (not (eq beardbolt-automatic-recompile 'on-save)))
+    (when beardbolt--change-timer
+      (cancel-timer beardbolt--change-timer))
+    (setq beardbolt--buffer-to-auto-save (current-buffer)
+          beardbolt--change-timer (run-with-timer beardbolt-compile-delay nil #'beardbolt--on-change-timer))))
 
-(defun rmsbolt--on-change-timer ()
-  (setq rmsbolt--change-timer nil)
-  (when (buffer-live-p rmsbolt--buffer-to-auto-save)
-    (with-current-buffer rmsbolt--buffer-to-auto-save
-      (setq rmsbolt--buffer-to-auto-save nil)
-      (when (or (< (line-number-at-pos (point-max)) rmsbolt-large-buffer-size)
-                (eq rmsbolt-automatic-recompile 'force))
+(defun beardbolt--on-change-timer ()
+  (setq beardbolt--change-timer nil)
+  (when (buffer-live-p beardbolt--buffer-to-auto-save)
+    (with-current-buffer beardbolt--buffer-to-auto-save
+      (setq beardbolt--buffer-to-auto-save nil)
+      (when (or (< (line-number-at-pos (point-max)) beardbolt-large-buffer-size)
+                (eq beardbolt-automatic-recompile 'force))
         ;; Clear `before-save-hook' to prevent things like whitespace cleanup
         ;; (e.g., set by spacemacs in `spacemacs-whitespace-cleanup.el`)
         ;; and aggressive indenting from running (this is a hot recompile).
@@ -1874,44 +1874,44 @@ and return it."
 
 ;;;###autoload
 ;; TODO handle more modes than c-mode
-(define-minor-mode rmsbolt-mode
-  "Toggle rmsbolt-mode.
+(define-minor-mode beardbolt-mode
+  "Toggle beardbolt-mode.
 
 This mode is enabled in both src and assembly output buffers."
   :global nil
-  :lighter rmsbolt-mode-lighter
-  :keymap rmsbolt-mode-map
+  :lighter beardbolt-mode-lighter
+  :keymap beardbolt-mode-map
   ;; Init
   (cond
-   (rmsbolt-mode
-    (setq rmsbolt--last-point (point))
-    (add-hook 'post-command-hook #'rmsbolt--post-command-hook nil t)
-    (add-hook 'kill-buffer-hook #'rmsbolt--on-kill-buffer nil t)
+   (beardbolt-mode
+    (setq beardbolt--last-point (point))
+    (add-hook 'post-command-hook #'beardbolt--post-command-hook nil t)
+    (add-hook 'kill-buffer-hook #'beardbolt--on-kill-buffer nil t)
 
-    (when (and rmsbolt-automatic-recompile
+    (when (and beardbolt-automatic-recompile
                ;; Only turn on auto-save in src buffers
-               (not (eq (current-buffer) (get-buffer rmsbolt-output-buffer))))
-      (add-hook 'after-save-hook #'rmsbolt--after-save nil t)
-      (when (eq rmsbolt-automatic-recompile t)
-        (add-hook 'after-change-functions #'rmsbolt--after-change nil t)))
+               (not (eq (current-buffer) (get-buffer beardbolt-output-buffer))))
+      (add-hook 'after-save-hook #'beardbolt--after-save nil t)
+      (when (eq beardbolt-automatic-recompile t)
+        (add-hook 'after-change-functions #'beardbolt--after-change nil t)))
 
-    (rmsbolt--gen-temp))
+    (beardbolt--gen-temp))
    (t ;; Cleanup
-    (rmsbolt--remove-overlays)
-    (remove-hook 'after-change-functions #'rmsbolt--after-change t)
-    (remove-hook 'after-save-hook #'rmsbolt--after-save t)
-    (remove-hook 'kill-buffer-hook #'rmsbolt--on-kill-buffer t)
-    (remove-hook 'post-command-hook #'rmsbolt--post-command-hook t))))
+    (beardbolt--remove-overlays)
+    (remove-hook 'after-change-functions #'beardbolt--after-change t)
+    (remove-hook 'after-save-hook #'beardbolt--after-save t)
+    (remove-hook 'kill-buffer-hook #'beardbolt--on-kill-buffer t)
+    (remove-hook 'post-command-hook #'beardbolt--post-command-hook t))))
 
 ;;;###autoload
-(defun rmsbolt ()
-  "Start a rmsbolt compilation and enable `rmsbolt-mode' for code region
+(defun beardbolt ()
+  "Start a beardbolt compilation and enable `beardbolt-mode' for code region
 highlighting and automatic recompilation."
   (interactive)
-  (unless rmsbolt-mode
-    (rmsbolt-mode))
-  (rmsbolt-compile))
+  (unless beardbolt-mode
+    (beardbolt-mode))
+  (beardbolt-compile))
 
-(provide 'rmsbolt)
+(provide 'beardbolt)
 
-;;; rmsbolt.el ends here
+;;; beardbolt.el ends here

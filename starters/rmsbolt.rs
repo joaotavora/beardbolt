@@ -1,8 +1,8 @@
-// rust rmsbolt starter file
+// rust beardbolt starter file
 
 // Local Variables:
-// rmsbolt-command: "rustc -C opt-level=0"
-// rmsbolt-disassemble: nil
+// beardbolt-command: "rustc -C opt-level=0"
+// beardbolt-disassemble: nil
 // End:
 
 

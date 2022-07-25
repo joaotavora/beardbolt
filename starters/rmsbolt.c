@@ -1,10 +1,10 @@
 #include <stdio.h>
 
-// C rmsbolt starter file
+// C beardbolt starter file
 
 // Local Variables:
-// rmsbolt-command: "gcc -O0"
-// rmsbolt-disassemble: nil
+// beardbolt-command: "gcc -O0"
+// beardbolt-disassemble: nil
 // End:
 
 int isRMS(int a) {

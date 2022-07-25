@@ -1,7 +1,7 @@
 <?php
 
 /*
-  RMSBolt requires the 'vld.so' extension to php in order to display opcodes for PHP.
+  beardbolt requires the 'vld.so' extension to php in order to display opcodes for PHP.
   You can install it following instructions from here:
   https://github.com/derickr/vld
 
@@ -32,6 +32,6 @@ function main() {
 main();
 
 // Local Variables:
-// rmsbolt-command: "php"
+// beardbolt-command: "php"
 // End:
 ?>

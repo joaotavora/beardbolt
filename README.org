@@ -1,19 +1,19 @@
 
-* [[https://gitlab.com/jgkamat/rmsbolt][RMSbolt]] [[https://melpa.org/#/rmsbolt][file:https://melpa.org/packages/rmsbolt-badge.svg]]
+* [[https://gitlab.com/jgkamat/beardbolt][beardbolt]] [[https://melpa.org/#/beardbolt][file:https://melpa.org/packages/beardbolt-badge.svg]]
 
 A supercharged implementation of the [[https://github.com/mattgodbolt/compiler-explorer][godbolt compiler-explorer]] for Emacs.
 
-RMSbolt tries to make it easy to see what your compiler is doing. It does this
+beardbolt tries to make it easy to see what your compiler is doing. It does this
 by showing you the assembly output of a given source code file. It also
 highlights which source code a given assembly block corresponds to, and vice
 versa. It supports more types of languages than any previous tool of its kind.
 
-* [[file:doc/rmsbolt.org][Documentation]]
+* [[file:doc/beardbolt.org][Documentation]]
 
-This README is a condensed version of the docs. [[file:doc/rmsbolt.org][For full usage instructions,
+This README is a condensed version of the docs. [[file:doc/beardbolt.org][For full usage instructions,
 please start at the docs (also available through info).]]
 
-* Why RMSbolt over godbolt?
+* Why beardbolt over godbolt?
 
 - Much more flexible and powerful:
   - Supports disassembly to bytecode as well as assembly.
@@ -45,45 +45,45 @@ please start at the docs (also available through info).]]
 
 * Installation
 
-rmsbolt will almost certainly not work naively on windows as it depends on a
+beardbolt will almost certainly not work naively on windows as it depends on a
 unix shell for building the compilation commands. It may work through cygwin
 though.
 
 ** Melpa
 
-[[http://melpa.org/#/rmsbolt][A melpa package is available for rmsbolt]].
+[[http://melpa.org/#/beardbolt][A melpa package is available for beardbolt]].
 
 ** Quelpa
 
 #+BEGIN_SRC emacs-lisp
-  (quelpa '(rmsbolt
+  (quelpa '(beardbolt
             :files (:defaults "starters")
             :fetcher gitlab
-            :repo "jgkamat/rmsbolt"))
+            :repo "jgkamat/beardbolt"))
 #+END_SRC
 
 * Running
-Run ~rmsbolt~ to compile the current buffer. This enables ~rmsbolt-mode~
+Run ~beardbolt~ to compile the current buffer. This enables ~beardbolt-mode~
 for code region highlighting and automatic recompilation on buffer changes.
 
-~rmsbolt-mode~ also adds the key binding ~C-c C-c~ to run a compilation.
+~beardbolt-mode~ also adds the key binding ~C-c C-c~ to run a compilation.
 
-Run ~rmsbolt-starter~ to generate an example source file for one of the supported languages.
+Run ~beardbolt-starter~ to generate an example source file for one of the supported languages.
 
-Run ~rmsbolt-compile~ to start a compilation without enabling ~rmsbolt-mode~.
+Run ~beardbolt-compile~ to start a compilation without enabling ~beardbolt-mode~.
 
 Language-specific quirks are listed in the full documentation.
 
 * Configuration
 
-RMSbolt is primarily configured with Emacs local variables. This lets you change
-compiler and rmsbolt options simply by editing a local variable block. The
+beardbolt is primarily configured with Emacs local variables. This lets you change
+compiler and beardbolt options simply by editing a local variable block. The
 starter files have this block with some common settings:
 
 #+BEGIN_SRC c
   // Local Variables:
-  // rmsbolt-command: "gcc -O0"
-  // rmsbolt-disassemble: nil
+  // beardbolt-command: "gcc -O0"
+  // beardbolt-disassemble: nil
   // End:
 #+END_SRC
 
@@ -106,7 +106,7 @@ The main knobs are described in the full documentation.
 ** Java
 [[https://i.imgur.com/KkWEMMj.gif][https://i.imgur.com/KkWEMMj.gif]]
 ** Go
-[[https://gitlab.com/jgkamat/rmsbolt/uploads/4ca143ac99f33880dbde000d71ff3763/rmsbolt-go-2.gif][https://gitlab.com/jgkamat/rmsbolt/uploads/4ca143ac99f33880dbde000d71ff3763/rmsbolt-go-2.gif]]
+[[https://gitlab.com/jgkamat/beardbolt/uploads/4ca143ac99f33880dbde000d71ff3763/beardbolt-go-2.gif][https://gitlab.com/jgkamat/beardbolt/uploads/4ca143ac99f33880dbde000d71ff3763/beardbolt-go-2.gif]]
 ** PHP
 [[https://i.imgur.com/xBfzaK9.gif][https://i.imgur.com/xBfzaK9.gif]]
 ** Pony
@@ -118,14 +118,14 @@ The main knobs are described in the full documentation.
 ** Common Lisp
 [[https://i.imgur.com/36aNVvf.gif][https://i.imgur.com/36aNVvf.gif]]
 ** Swift
-[[https://gitlab.com/jgkamat/rmsbolt/uploads/80d38e840a149c77951891c3623ca2f2/lFG72Lv_-_Imgur.gif][https://gitlab.com/jgkamat/rmsbolt/uploads/80d38e840a149c77951891c3623ca2f2/lFG72Lv_-_Imgur.gif]]
+[[https://gitlab.com/jgkamat/beardbolt/uploads/80d38e840a149c77951891c3623ca2f2/lFG72Lv_-_Imgur.gif][https://gitlab.com/jgkamat/beardbolt/uploads/80d38e840a149c77951891c3623ca2f2/lFG72Lv_-_Imgur.gif]]
 ** Nim
 [[https://i.imgur.com/8y4jtK9.gif][https://i.imgur.com/8y4jtK9.gif]]
 
 * Community and Support
 
 If you need help, have questions, or just want to chat about compilers, feel
-free to drop by ~#rmsbolt~ on [[https://libera.chat/][Libera]]. Please be sure to stick around, for a
+free to drop by ~#beardbolt~ on [[https://libera.chat/][Libera]]. Please be sure to stick around, for a
 reply.
 
 If you find issues, please send me a mail or submit an issue.

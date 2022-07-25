@@ -1,10 +1,10 @@
 const std = @import("std");
 
-// Zig rmsbolt starter file
+// Zig beardbolt starter file
 
 // Local Variables:
-// rmsbolt-command: "zig build-obj -O ReleaseFast"
-// rmsbolt-disassemble: nil
+// beardbolt-command: "zig build-obj -O ReleaseFast"
+// beardbolt-disassemble: nil
 // End:
 
 export fn isRMS(a: u8) u8 {

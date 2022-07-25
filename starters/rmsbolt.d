@@ -1,5 +1,5 @@
 // Local Variables:
-// rmsbolt-command: "ldc2 -O0"
+// beardbolt-command: "ldc2 -O0"
 // End:
 
 import std.stdio : writeln;

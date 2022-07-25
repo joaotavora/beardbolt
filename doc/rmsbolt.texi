@@ -1,19 +1,19 @@
 \input texinfo    @c -*- texinfo -*-
 @c %**start of header
-@setfilename rmsbolt.info
-@settitle RMSbolt User Manual
+@setfilename beardbolt.info
+@settitle beardbolt User Manual
 @documentencoding UTF-8
 @documentlanguage en
 @c %**end of header
 
 @dircategory Emacs
 @direntry
-* RMSbolt: (rmsbolt).   Viewing disassembly in Emacs with RMSbolt.
+* beardbolt: (beardbolt).   Viewing disassembly in Emacs with beardbolt.
 @end direntry
 
 @finalout
 @titlepage
-@title RMSbolt User Manual
+@title beardbolt User Manual
 @author Jay Kamat
 @end titlepage
 
@@ -21,12 +21,12 @@
 
 @ifnottex
 @node Top
-@top RMSbolt User Manual
+@top beardbolt User Manual
 
 :PREAMBLE:
-RMSbolt is a compiler output viewer in Emacs.
+beardbolt is a compiler output viewer in Emacs.
 
-RMSbolt tries to make it easy to see what your compiler is doing. It does this
+beardbolt tries to make it easy to see what your compiler is doing. It does this
 by showing you the assembly output of a given source code file. It also
 highlights which source code a given assembly block corresponds to, and vice
 versa. It supports more types of languages than any previous tool of its kind.
@@ -88,7 +88,7 @@ Developing
 @node Installation
 @chapter Installation
 
-A @uref{https://melpa.org/#/rmsbolt, melpa package} is available for rmsbolt.
+A @uref{https://melpa.org/#/beardbolt, melpa package} is available for beardbolt.
 
 No dependencies are required, other than an Emacs newer than 25.1
 
@@ -99,34 +99,34 @@ No dependencies are required, other than an Emacs newer than 25.1
 @node Quelpa
 @section Quelpa
 
-This is a quelpa formula for RMSbolt
+This is a quelpa formula for beardbolt
 
 @lisp
-(quelpa '(rmsbolt
+(quelpa '(beardbolt
           :files (:defaults "starters")
           :fetcher gitlab
-          :repo "jgkamat/rmsbolt"))
+          :repo "jgkamat/beardbolt"))
 @end lisp
 
 @node Running
 @chapter Running
 
-Once installed, use the @code{rmsbolt-starter} command to generate starter files, or
-enable @code{rmsbolt-mode} in a supported language. Then run @code{rmsbolt-compile} or use
+Once installed, use the @code{beardbolt-starter} command to generate starter files, or
+enable @code{beardbolt-mode} in a supported language. Then run @code{beardbolt-compile} or use
 the default @code{C-c C-c} binding to pop open a disassembly buffer. After the first
 run, the buffer should automatically update.
 
 @node Configuring
 @chapter Configuring
 
-RMSbolt is primarily configured with Emacs local variables. This lets you change
-compiler and rmsbolt options simply by editing a local variable block. The
+beardbolt is primarily configured with Emacs local variables. This lets you change
+compiler and beardbolt options simply by editing a local variable block. The
 starter files have this block with some common settings:
 
 @example
 // Local Variables:
-// rmsbolt-command: "gcc -O0"
-// rmsbolt-disassemble: nil
+// beardbolt-command: "gcc -O0"
+// beardbolt-disassemble: nil
 // End:
 @end example
 
@@ -142,57 +142,57 @@ file to work}. Any method of setting buffer-local variables will work though.
 
 @itemize
 @item
-Local Option: rmsbolt-command
+Local Option: beardbolt-command
 
 Determines the prefix of the compilation command to use. Use this to switch
 between compilers or pass flags to your compiler.
 
 @item
-Local Option: rmsbolt-default-directory
+Local Option: beardbolt-default-directory
 
 Determines the default directory to compile from, which is useful if you are
 building with a build-system.
 
 @item
-Local Option: rmsbolt-disassemble
+Local Option: beardbolt-disassemble
 
 Disassemble from a compiled binary with objdump, if supported.
 
 @item
-Local Option: rmsbolt-filter-directives
+Local Option: beardbolt-filter-directives
 
 Whether to filter unused assembly directives out of final output.
 
 @item
-Local Option: rmsbolt-filter-labels
+Local Option: beardbolt-filter-labels
 
 Whether to filter unused labels from final output
 
 @item
-Local Option: rmsbolt-filter-comment-only
+Local Option: beardbolt-filter-comment-only
 
 Whether to filter lines that are comment-only.
 
 @item
-Local Option: rmsbolt-asm-format
+Local Option: beardbolt-asm-format
 
 Which output format to use. Supported values vary between languages. In
 general, @code{"intel"} and @code{"att"} are supported. @code{nil} means to use the tool's
 defaults. Other values may work as well, depending on your compiler.
 
 @item
-Local Option: rmsbolt-demangle
+Local Option: beardbolt-demangle
 
 Demangle the output, if supported.
 
 @item
-Local Option: rmsbolt-ignore-binary-limit
+Local Option: beardbolt-ignore-binary-limit
 
 Ignore the binary size limit for disassembly. This will almost certainly cause
 Emacs to hang during large processing.
 
 @item
-Local Option: rmsbolt-demangle
+Local Option: beardbolt-demangle
 
 Enable or disable demangling, if the language supports it.
 @end itemize
@@ -332,7 +332,7 @@ Uses Go's objdump tool to produce viewing-only bytecode. Go must be on the path.
 @section Nim
 
 Builds into object files into a temporary @code{nim-cache} directory generated by
-rmsbolt, which will then be copied and dissassembled.
+beardbolt, which will then be copied and dissassembled.
 C++ backend is also possible to either with @code{nim cpp} or @code{nim c
 --passC:-std=gnu++14} and uses @code{c++filt} demangler.
 
@@ -341,14 +341,14 @@ Use the @code{@{.exportc.@}} pragma for at least the main procedure that will be
 @node Integrations
 @chapter Integrations
 
-This section covers integrations that RMSbolt provides, which make it easier to
-use RMSbolt with complex projects with many dependencies.
+This section covers integrations that beardbolt provides, which make it easier to
+use beardbolt with complex projects with many dependencies.
 
 Integrations are very new, and as such, may be highly buggy and require extra
 work to debug.
 
-Most integrations only take effect when @code{rmsbolt-command} and
-@code{rmsbolt-default-directory} are nil! Setting either of these will disable any
+Most integrations only take effect when @code{beardbolt-command} and
+@code{beardbolt-default-directory} are nil! Setting either of these will disable any
 attempt at using the integration system.
 
 @menu
@@ -391,15 +391,15 @@ cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 .
 Compile the project completely. If you pass flags to your build system, make
 sure they are passed when generating @code{compile_commands.json} as well.
 @item
-Open the file in question, and enable @code{rmsbolt-mode}.
+Open the file in question, and enable @code{beardbolt-mode}.
 @item
-Run @code{rmsbolt-compile}.
+Run @code{beardbolt-compile}.
 @end enumerate
 
 @node Developing
 @chapter Developing
 
-These are some tips which will help people working on developing or customizing RMSbolt.
+These are some tips which will help people working on developing or customizing beardbolt.
 
 @menu
 * Adding a Language::
@@ -419,7 +419,7 @@ available in the compiled form if they exist.
 
 @enumerate
 @item
-@uref{../rmsbolt.el, Add a new entry to the language definitions statement.}
+@uref{../beardbolt.el, Add a new entry to the language definitions statement.}
 @itemize
 @item
 To do this, you will need to (at a minimum) add a mode, compile-command, a
@@ -427,7 +427,7 @@ compile-cmd-function, and a starter file name.
 @item
 The compile-cmd-function is a function that will turn local variable
 settings into a valid command which will take in a filename and output
-assembly or an executable. See @code{rmsbolt--c-compile-cmd} for an example.
+assembly or an executable. See @code{beardbolt--c-compile-cmd} for an example.
 @item
 When building compilation commands, please make sure to use absolute paths,
 as the default-directory is not guaranteed to be stable.
@@ -436,12 +436,12 @@ If the assembly is not in a standard format, you will need to define a
 @code{process-asm-custom-fn} as well (see python/java for examples).
 @item
 If you would like to add language tweaks in your own config (ie: take full
-control over what rmsbolt does completely), you can use
-@code{rmsbolt-language-descriptor} to fully override the defaults with a custom
+control over what beardbolt does completely), you can use
+@code{beardbolt-language-descriptor} to fully override the defaults with a custom
 language definition.
 @end itemize
 @item
-@uref{../rmsbolt.el, Add a new entry into the starter file}
+@uref{../beardbolt.el, Add a new entry into the starter file}
 @itemize
 @item
 For this, you will need to make a starter file. See @uref{./../starters/, this folder} for

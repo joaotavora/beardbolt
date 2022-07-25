@@ -1,10 +1,10 @@
-// pony rmsbolt starter file
+// pony beardbolt starter file
 
 // Passing '--debug' is recommended to pony because without it LOC hints are optimized out
 
 // Local Variables:
-// rmsbolt-command: "ponyc --debug"
-// rmsbolt-disassemble: nil
+// beardbolt-command: "ponyc --debug"
+// beardbolt-disassemble: nil
 // End:
 
 actor Main
