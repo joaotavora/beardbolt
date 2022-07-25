@@ -239,10 +239,13 @@ may not be cleared to default as variables are usually."
 Used to work around inconsistencies in alternative shells.")
 
 (defvar bb--temp-dir nil
-  "Temporary directory to use for compilation and other reasons.
+  "Temporary directory to use for compilation and other reasons.")
 
-Please DO NOT modify this blindly, as this directory will get
-deleted on Emacs exit.")
+(defun bb--temp-dir ()
+  (or (and bb--temp-dir
+           (file-exists-p bb--temp-dir)
+           bb--temp-dir)
+      (setq bb--temp-dir (make-temp-file "beardbolt-bb-" t)))) 
 
 (defvar bb-dir nil
   "The directory which beardbolt is installed to.")
@@ -273,8 +276,8 @@ Outputs assembly file if ASM.
 This function does NOT quote the return value for use in inferior shells."
   (if (and (not asm)
            (buffer-local-value 'bb-disassemble src-buffer))
-      (expand-file-name "beardbolt.out" bb--temp-dir)
-    (expand-file-name "beardbolt.s" bb--temp-dir)))
+      (expand-file-name "beardbolt.out" (bb--temp-dir))
+    (expand-file-name "beardbolt.s" (bb--temp-dir))))
 
 ;;;; Regexes
 
@@ -376,7 +379,7 @@ the compile command.")
   (default-directory
     nil
     :type 'string
-    :documentation "Default directory to run compilation in. By default, use bb--temp-dir.
+    :documentation "Default directory to run compilation in. By default, use (bb--temp-dir).
 If provided a function, call that function with the source buffer to determine
 the default directory.")
   (compile-cmd-function
@@ -578,7 +581,7 @@ Use SRC-BUFFER as buffer for local variables."
 (cl-defun bb--pony-compile-cmd (&key src-buffer)
   "Process a compile command for ponyc."
   (let* ((cmd (buffer-local-value 'bb-command src-buffer))
-         (dir (expand-file-name "pony/" bb--temp-dir))
+         (dir (expand-file-name "pony/" (bb--temp-dir)))
          (_ (make-directory dir t))
          ;; (base-filename (file-name-sans-extension
          ;;                 (file-name-nondirectory
@@ -698,7 +701,7 @@ https://github.com/derickr/vld"
    src-buffer
    (let* ((cmd (buffer-local-value 'bb-command src-buffer))
 	  (cmd
-	   (let* ((outdir (expand-file-name "nim-cache" bb--temp-dir)))
+	   (let* ((outdir (expand-file-name "nim-cache" (bb--temp-dir))))
 		  (string-join
 		   (list cmd
 			 "--debugger:native"
@@ -724,7 +727,7 @@ https://github.com/derickr/vld"
           (cmd (string-join
                 (list cmd
                       src-filename
-                      "--cache-dir" (expand-file-name "zig-cache" bb--temp-dir)
+                      "--cache-dir" (expand-file-name "zig-cache" (bb--temp-dir))
                       (concat (if disass
                                   "-femit-bin="
                                 "-fno-emit-bin -femit-asm=")
@@ -1570,9 +1573,9 @@ and return it."
                #'identity
                (list "&&" demangler
                      "<" (bb-output-filename src-buffer t)
-                     ">" (expand-file-name "tmp.s" bb--temp-dir)
+                     ">" (expand-file-name "tmp.s" (bb--temp-dir))
                      "&&" "mv"
-                     (expand-file-name "tmp.s" bb--temp-dir)
+                     (expand-file-name "tmp.s" (bb--temp-dir))
                      (bb-output-filename src-buffer t))
                " "))
     existing-cmd))
@@ -1614,7 +1617,7 @@ and return it."
            (asm-format
             (buffer-local-value 'bb-asm-format src-buffer))
            (default-directory (or bb-default-directory
-                                  bb--temp-dir)))
+                                  (bb--temp-dir))))
       (run-hooks 'bb-after-parse-hook)
       (bb--rainbowize-cleanup)
       (when (buffer-local-value 'bb-disassemble src-buffer)
@@ -1678,21 +1681,6 @@ and return it."
     map)
   "Keymap for function `bb-mode'.")
 
-;;;; Init commands
-
-(defun bb--gen-temp ()
-  "Generate beardbolt temp dir if needed."
-  (unless (and bb--temp-dir
-               (file-exists-p bb--temp-dir))
-    (setq bb--temp-dir
-          (make-temp-file "bb-" t))
-    (add-hook 'kill-emacs-hook
-              (lambda ()
-                (when (and (boundp 'bb--temp-dir)
-                           bb--temp-dir
-                           (file-directory-p bb--temp-dir))
-                  (delete-directory bb--temp-dir t))
-                (setq bb--temp-dir nil)))))
 
 ;;;;; Starter Definitions
 
@@ -1723,10 +1711,9 @@ and return it."
   "Setup new file based on the sample STARTER-FILE-NAME."
   (interactive
    (list (completing-read "Language: " bb-starter-files nil t)))
-  (bb--gen-temp)
   (let* ((starter-file-name (cdr (assoc lang-name bb-starter-files)))
          (file-name
-          (expand-file-name starter-file-name bb--temp-dir))
+          (expand-file-name starter-file-name (bb--temp-dir)))
          (exists (file-exists-p file-name))
          (src-file-name
           (when bb-dir
@@ -1906,9 +1893,7 @@ This mode is enabled in both src and assembly output buffers."
                (not (eq (current-buffer) (get-buffer bb-output-buffer))))
       (add-hook 'after-save-hook #'bb--after-save nil t)
       (when (eq bb-automatic-recompile t)
-        (add-hook 'after-change-functions #'bb--after-change nil t)))
-
-    (bb--gen-temp))
+        (add-hook 'after-change-functions #'bb--after-change nil t))))
    (t ;; Cleanup
     (bb--remove-overlays)
     (remove-hook 'after-change-functions #'bb--after-change t)
