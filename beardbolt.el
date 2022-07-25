@@ -76,7 +76,6 @@
 (require 'color)
 
 (require 'beardbolt-java)
-(require 'beardbolt-split)
 
 ;;; Code:
 ;;;; Customize:
@@ -413,6 +412,22 @@ Return value is quoted for passing to the shell."
   "Set unquoted variable VAR to value VAL in current buffer."
   (declare (debug (symbolp form)))
   `(set (make-local-variable ,var) ,val))
+
+(defun beardbolt-split-rm-single (cmd flag &optional test)
+  "Remove a single FLAG from CMD.  Test according to TEST."
+  (mapconcat #'identity (cl-remove flag (split-string cmd)
+                                   :test (or test #'string=))
+             " "))
+
+(defun beardbolt-split-rm-double (cmd flag)
+  "Remove a single FLAG and arg from CMD."
+  (cl-loop while split with split = (split-string cmd)
+           for i from 0
+           for probe = (car split)
+           if (string= probe flag) do (setq split (cddr split))
+           else
+           concat (and (cl-plusp i) " ")
+           and concat probe and do (setq split (cdr split))))
 
 ;;;; Language Functions
 ;;;;; Compile Commands
