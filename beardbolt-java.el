@@ -37,32 +37,32 @@
 ;;; Code:
 
 ;;;; Regexes
-(defvar beardbolt-java-code-start  (rx bol (1+ space)
+(defvar bb-java-code-start  (rx bol (1+ space)
                                      (group "Code:")))
-(defvar beardbolt-java-line-table-start  (rx bol (1+ space)
+(defvar bb-java-line-table-start  (rx bol (1+ space)
                                            (group "LineNumberTable:")))
-(defvar beardbolt-java-local-table-start  (rx bol (1+ space)
+(defvar bb-java-local-table-start  (rx bol (1+ space)
                                             (group "LocalVariableTable:")))
-(defvar beardbolt-java-code (rx bol (group (1+ space)) (group (1+ digit))
+(defvar bb-java-code (rx bol (group (1+ space)) (group (1+ digit))
                               ":" (1+ space) (group (1+ any)) eol))
-(defvar beardbolt-java-line-table (rx bol (1+ space) "line" (1+ space) (group (1+ digit))
+(defvar bb-java-line-table (rx bol (1+ space) "line" (1+ space) (group (1+ digit))
                                     ":" (1+ space) (group (1+ digit))))
 
 ;;;; Functions
-(defun beardbolt-java-process-bytecode (asm-lines &optional filter)
+(defun bb-java-process-bytecode (asm-lines &optional filter)
   "Process ASM-LINES to add properties refrencing the source code.
 Also FILTER \"useless\" lines out, optionally."
   (let (result state result-hold  code-block code-linum in-bracket)
     (dolist (line asm-lines)
       (pcase state
         ('nil ;; We haven't found any special blocks, so look for them and copy to output
-         (when (string-match-p beardbolt-java-code-start line)
+         (when (string-match-p bb-java-code-start line)
            (setq state 'code-found)
            (push line result)))
         ('code-found ;; We are past Code: so begin parsing instructions
-         (if (string-match-p beardbolt-java-line-table-start line)
+         (if (string-match-p bb-java-line-table-start line)
              (setq state 'linum-found)
-           (if (and (string-match beardbolt-java-code line)
+           (if (and (string-match bb-java-code line)
                     (match-string 1 line)
                     (match-string 2 line)
                     (match-string 3 line)
@@ -80,14 +80,14 @@ Also FILTER \"useless\" lines out, optionally."
                (setq in-bracket nil))
              )))
         ('linum-found ;; We are past LineNumberTable, so begin generating the src->code table
-         (if (string-match-p beardbolt-java-local-table-start line)
+         (if (string-match-p bb-java-local-table-start line)
              (progn
                (setq state 'localvar-found)
                ;; Get everything ready for agg
                (setq code-block (nreverse code-block))
                (setq code-linum (nreverse code-linum)))
 
-           (if (and (string-match beardbolt-java-line-table line)
+           (if (and (string-match bb-java-line-table line)
                     (match-string 1 line)
                     (match-string 2 line))
                (push (cons (string-to-number (match-string 2 line))
@@ -110,7 +110,7 @@ Also FILTER \"useless\" lines out, optionally."
                  (when (and current-mapping
                             (numberp (cdr current-mapping)))
                    (add-text-properties 0 (length current-line)
-                                        `(beardbolt-src-line ,(cdr current-mapping)) current-line))
+                                        `(bb-src-line ,(cdr current-mapping)) current-line))
                  (push current-line result)))
              ;; Don't keep agging
              (setq code-linum nil
@@ -132,3 +132,6 @@ Also FILTER \"useless\" lines out, optionally."
 (provide 'beardbolt-java)
 
 ;;; beardbolt-java.el ends here
+;; Local Variables:
+;; read-symbol-shorthands: (("bb-" . "beardbolt-"))
+;; End:
