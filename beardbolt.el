@@ -1411,13 +1411,12 @@ Argument ASM-LINES input lines."
   (setq bb--rainbow-overlays nil))
 
 ;;;;; Handlers
-(cl-defun bb--handle-finish-compile (buffer str &key override-buffer stopped)
+(cl-defun bb--handle-finish-compile (buffer str &key override-buffer)
   "Finish hook for compilations.
 Argument BUFFER compilation buffer.
 Argument STR compilation finish status.
 Argument OVERRIDE-BUFFER asm src buffer to use instead of reading
-   `bb-output-filename'.
-Argument STOPPED The compilation was stopped to start another compilation."
+   `bb-output-filename'."
   (when (not (buffer-live-p buffer))
     (error "Dead buffer passed to compilation-finish-function! beardbolt cannot continue."))
   (let ((compilation-fail
@@ -1428,8 +1427,7 @@ Argument STOPPED The compilation was stopped to start another compilation."
 
     (with-current-buffer (get-buffer-create bb-output-buffer)
       ;; Store src buffer value for later linking
-      (cond (stopped) ; Do nothing
-            ((not compilation-fail)
+      (cond ((not compilation-fail)
              (if (and (not override-buffer)
                       (not (file-exists-p (bb-output-filename src-buffer t))))
                  (message "Error reading from output file.")
@@ -1579,6 +1577,9 @@ and return it."
                " "))
     existing-cmd))
 
+(defun bb--compilation-buffer (&rest _)
+  (get-buffer-create "*bb-compilation*"))
+
 ;;;;; UI Functions
 (defun bb-compile ()
   "Compile the current beardbolt buffer."
@@ -1657,7 +1658,7 @@ and return it."
                 (compilation-auto-jump-to-first-error t))
             ;; TODO should this be configurable?
             (bb-with-display-buffer-no-window
-             (compilation-start cmd nil (lambda (&rest _) "*bb-compilation*"))))
+             (compilation-start cmd nil #'bb--compilation-buffer)))
         ;; Only jump to errors, skip over warnings
         (setq-local compilation-skip-threshold 2)
         (add-hook 'compilation-finish-functions
@@ -1665,15 +1666,10 @@ and return it."
         (setq bb-src-buffer src-buffer))))))
 
 (defun bb--stop-running-compilation ()
-  (when-let* ((compilation-buffer (get-buffer "*bb-compilation*"))
-              (proc (get-buffer-process compilation-buffer)))
-    (when (eq (process-status proc) 'run)
-      (set-process-sentinel proc nil)
-      (interrupt-process proc)
-      (bb--handle-finish-compile compilation-buffer nil :stopped t)
-      ;; Wait a short while for the process to exit cleanly
-      (sit-for 0.2)
-      (delete-process proc))))
+  (let ((buffer (bb--compilation-buffer)))
+    (if-let ((proc (get-buffer-process buffer)))
+	(interrupt-process proc)
+      (error "[beardbolt] No compilation to stop"))))
 
 ;;;; Keymap
 (defvar bb-mode-map
