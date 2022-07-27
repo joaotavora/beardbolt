@@ -334,8 +334,7 @@ This function does NOT quote the return value for use in inferior shells."
                                "-"
                                "-o" (shell-quote-argument (bb-output-filename
                                                            (current-buffer)))
-                               (when (and bb-asm-format
-                                          (not bb-disassemble))
+                               (when (and bb-asm-format (not bb-disassemble))
                                  (format "-masm=%s" bb-asm-format)))
                          " "))
          (cmd (if (and bb-flag-quirks
@@ -360,6 +359,7 @@ This function does NOT quote the return value for use in inferior shells."
 (defvar bb-languages
   `((c-mode
      . ,(make-beardbolt-lang :compile-cmd-function #'bb--c-compile-cmd
+                             :base-cmd "gcc"
                              :objdumper 'objdump
                              :asm-function #'bb--process-src-asm-lines
                              :disass-function #'bb--process-disassembled-lines
@@ -367,6 +367,7 @@ This function does NOT quote the return value for use in inferior shells."
                              :disass-hidden-funcs bb--hidden-func-c))
     (c++-mode
      . ,(make-beardbolt-lang :compile-cmd-function #'bb--c-compile-cmd
+                             :base-cmd "g++"
                              :objdumper 'objdump
                              :asm-function #'bb--process-src-asm-lines
                              :disass-function #'bb--process-disassembled-lines
@@ -792,8 +793,8 @@ Interactively, determine LANG from `major-mode'."
                                 "&&"
                                 bb-objdump-binary "-d" (bb-output-filename src-buffer)
                                 "-C" "--insn-width=16" "-l"
-                                (when (not (booleanp bb-asm-format))
-                                  (concat "-M " bb-asm-format))
+                                (when bb-asm-format
+                                 (format "-M %s" bb-asm-format))
                                 ">" (bb-output-filename src-buffer t))
                           " ")))
         (_
