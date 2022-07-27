@@ -769,7 +769,13 @@ and return it."
 Interactively, determine LANG from `major-mode'."
   (interactive (list (bb--get-lang)))
   (bb--maybe-stop-running-compilation)
-  (let ((noninteractive t)) (hack-local-variables))
+  (cl-letf (((symbol-function 'hack-local-variables-confirm)
+             (lambda (_all-vars unsafe-vars risky-vars &rest _)
+               (when unsafe-vars
+                 (error "[beardbolt] Some variables unsafe %s" unsafe-vars))
+               (when risky-vars
+                 (error "[beardbolt] Some variables risky %s" risky-vars)))))
+    (hack-local-variables))
   (let* ((dump-file
           (make-temp-file "beardbolt-dump-" nil
                           (concat "." (file-name-extension buffer-file-name))
