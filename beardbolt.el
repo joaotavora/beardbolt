@@ -25,45 +25,7 @@
 ;; beardbolt is a fork of the amazing rmsbolt.el, found at
 ;; https://gitlab.com/jgkamat/rmsbolt, a package to provide assembly or
 ;; bytecode output for a source code input file.
-;;
-;; It currently supports: C/C++, OCaml, Haskell, Python, Java, Go, PHP, D,
-;; Pony, Zig, Swift, Emacs Lisp, and (limited) Common Lisp.
-;;
-;; Adding support for more languages, if they have an easy manual compilation
-;; path from source->assembly/bytecode with debug information, should be much
-;; easier than in other alternatives.
-;;
-;; It's able to do this by:
-;; 1. Compiling changes automatically, adding options which cause the compiler
-;; to output assembly/bytecode with debug information (or by using objdump)
-;; 2. Parse assembly/bytecode to create a map from it to the original source
-;; 3. Strip out unneeded information from bytecode to only show useful code
-;; 4. Provide an interface for highlighting the matched assembly/bytecode line
-;; to the source and vice versa
-;;
-;; Tweakables:
-;; beardbolt is primarily configured with Emacs local variables. This lets you
-;; change compiler and beardbolt options simply by editing a local variable block.
-;;
-;; Notable options:
-;; `beardbolt-command': prefix of the compilation command to use.
-;; `beardbolt-default-directory': default-drectory to compile from.
-;; `beardbolt-disassemble': disassemble from compiled binary with objdump
-;; `beardbolt-filter-*': Tweak filtering of binary output.
-;; `beardbolt-asm-format': Choose between intel att, and other syntax if supported.
-;; `beardbolt-demangle': Demangle the output, if supported.
-;;
-;; For more advanced configuration (to the point where you can override almost
-;; all of beardbolt yourself), you can set `beardbolt-language-descriptor' with a
-;; replacement language spec.
-;;
-;; Please see the readme at https://gitlab.com/jgkamat/beardbolt for
-;; more information!
-;;
-;; Thanks:
-;; Inspiration and some assembly parsing logic was adapted from Matt Godbolt's
-;; compiler-explorer: https://github.com/mattgodbolt/compiler-explorer and
-;; Jonas Konrad's javap: https://github.com/yawkat/javap.
+
 
 ;;; Requires:
 
@@ -91,7 +53,7 @@
   "The base command to run beardbolt from."
   :type 'string
   ;; nil means use default command
-  :safe (lambda (v) (or (booleanp v) (stringp v)))
+  :safe (lambda (v) (or (booleanp v) (listp v) (stringp v)))
   :group 'beardbolt)
 
 (defcustom bb-asm-format 'att
@@ -106,17 +68,22 @@ If you are not on x86, you most likely want to set this to nil."
   :type 'string
   :safe (lambda (v) (or (booleanp v) (symbolp v) (stringp v)))
   :group 'beardbolt)
-(defcustom bb-filter-directives t
-  "Whether to filter assembly directives."
+(defcustom bb-preserve-directives nil
+  "Whether to preserve assembly directives."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
-(defcustom bb-filter-labels t
-  "Whether to filter unused labels."
+(defcustom bb-preserve-labels nil
+  "Whether to preserve unused labels."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
-(defcustom bb-filter-comment-only t
+(defcustom bb-preserve-library-functions t
+  "Whether to preserve library function."
+  :type 'boolean
+  :safe 'booleanp
+  :group 'beardbolt)
+(defcustom bb-preserve-comments nil
   "Whether to filter comment-only lines."
   :type 'boolean
   :safe 'booleanp
@@ -131,18 +98,6 @@ If you are not on x86, you most likely want to set this to nil."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
-(defcustom bb-flag-quirks t
-  "Whether to tweak flags to enable as many features as possible.
-
-In most cases, we will try to honor flags in bb-command as
-much as possible. However, some features may be disabled with
-some odd combinations of flags. This variable controls
-removing/adding flags to handle those cases.
-
-Note that basic flags to ensure basic usage are always modified."
-  :type 'boolean
-  :safe 'booleanp
-  :group 'beardbolt)
 
 ;;;; Faces
 
@@ -154,8 +109,10 @@ Note that basic flags to ensure basic usage are always modified."
 ;;;; Basic model
 (defvar-local bb--output-buffer nil)
 (defvar-local bb--source-buffer nil)
+(defvar-local bb--compile-spec nil)
+(defvar-local bb--declared-output nil)
 (defvar-local bb--dump-file nil "Temporary file")
-(defvar-local bb-line-mappings nil "Maps source lines -> asm regions")
+(defvar-local bb--line-mappings nil "Maps source lines -> asm regions")
 (defvar-local bb--relation-overlays nil "Overlays relating source to asm.")
 (defvar-local bb--rainbow-overlays nil "Rainbow overlays.")
 
@@ -166,17 +123,11 @@ Note that basic flags to ensure basic usage are always modified."
         (setq bb--output-buffer
               (with-current-buffer
                   (generate-new-buffer (format "*bb-output for %s*" src-buffer))
-                (asm-mode)
-                (setq bb--source-buffer src-buffer)
-                (bb--output-mode)
                 (current-buffer))))))
 
-;; whether bb-mode is enabled.
 (defvar bb-hide-compile t)
 
-(defvar bb-binary-asm-limit 10000)
-
-(defvar bb-compile-delay 0.4
+(defvar bb-compile-delay 1.0
   "Time in seconds to delay before recompiling if there is a change.")
 
 (defvar bb--shell "bash"
@@ -187,120 +138,92 @@ Used to work around inconsistencies in alternative shells.")
   "Temporary directory to use for compilation and other reasons.")
 
 (defun bb--temp-dir ()
-  (or (and bb--temp-dir
-           (file-exists-p bb--temp-dir)
-           bb--temp-dir)
+  (or (and bb--temp-dir (file-exists-p bb--temp-dir) bb--temp-dir)
       (setq bb--temp-dir (make-temp-file "beardbolt-bb-" t)))) 
 
-(defvar bb-dir nil
+(defvar bb-dir (file-name-directory load-file-name)
   "The directory which beardbolt is installed to.")
-(when load-file-name
-  (setq bb-dir (file-name-directory load-file-name)))
 
 (defvar-local bb-objdump-binary "objdump"
   "A binary to use for objdumping when using `bb-disassemble'.
 Useful if you have multiple objdumpers and want to select between them")
 
-;;;; Variable-like funcs
-(defun bb-output-filename (src-buffer &optional asm)
-  "Function for generating an output filename for SRC-BUFFER.
-
-Outputs assembly file if ASM.
-This function does NOT quote the return value for use in inferior shells."
-  (if (and (not asm)
-           (buffer-local-value 'bb-disassemble src-buffer))
-      (expand-file-name "beardbolt.out" (bb--temp-dir))
-    (expand-file-name "beardbolt.s" (bb--temp-dir))))
-
 ;;;; Regexes
 
-(defvar bb-label-def  (rx bol (group (any ".a-zA-Z_$@")
-                                          (0+ (any "a-zA-Z0-9$_@.")))
-                               ":"))
+(defvar bb-label-start  "^\\([^:]+\\): *\\(?:#\\|$\\)\\(?:.*\\)")
+
+
 (defvar bb-defines-global (rx bol (0+ space) ".glob"
-                                   (opt "a") "l" (0+ space)
-                                   (group (any ".a-zA-Z_")
-                                          (0+ (any "a-zA-Z0-9$_.")))))
-(defvar bb-label-find (rx (any ".a-zA-Z_")
+                              (opt "a") "l" (0+ space)
+                              (group (any ".a-zA-Z_")
+                                     (0+ (any "a-zA-Z0-9$_.")))))
+
+(defvar bb-defines-weak (rx bol (0+ space) ".weak"
+                            (0+ space)
+                            (group (any ".a-zA-Z_")
+                                   (0+ (any "a-zA-Z0-9$_.")))))
+(defvar bb-label-reference (rx (any ".a-zA-Z_")
                                (0+
                                 (any "a-zA-Z0-9$_."))))
-(defvar bb-assignment-def (rx bol (0+ space)
-                                   (group (any ".a-zA-Z_$")
-                                          (1+ (any "a-zA-Z0-9$_.")))
-                                   (0+ space) "="))
-(defvar bb-has-opcode (rx bol (0+ space)
-                               (any "a-zA-Z")))
+(defvar bb-set-directive (rx bol (0+ space) ".set" (1+ space)
+                             (group (any ".a-zA-Z_")
+                                    (0+ (any "a-zA-Z0-9$_.")))
+                             (0+ space) "," (0+ space)
+                             (group (any ".a-zA-Z_")
+                                    (0+ (any "a-zA-Z0-9$_.")))))
+(defvar bb-has-opcode (rx bol (1+ space)
+                          (1+ (any "a-zA-Z"))))
 
-(defvar bb-defines-function (rx bol (0+ space) ".type"
-                                     (0+ any) "," (0+ space) (any "@%")
-                                     "function" eol))
+(defvar bb-defines-function-or-object (rx bol
+                                          (0+ space) ".type"
+                                          (0+ space)
+                                          (group (0+ any)) "," (0+ space) (any "@%")))
 (defvar bb-data-defn (rx bol (0+ space) "."
-                              (group (or "string" "asciz" "ascii"
-                                         (and
-                                          (optional (any "1248")) "byte")
-                                         "short" "word" "long" "quad" "value" "zero"))))
+                         (group (or "string" "asciz" "ascii"
+                                    (and
+                                     (optional (any "1248")) "byte")
+                                    "short" "word" "long" "quad" "value" "zero"))))
 
-(defvar bb-directive (rx bol (0+ space) "." (0+ any) eol))
 (defvar bb-endblock (rx "." (or "cfi_endproc" "data" "text" "section")))
 (defvar bb-comment-only (rx bol (0+ space) (or (and (or (any "#@;") "//"))
-                                                    (and "/*" (0+ any) "*/"))
-                                 (0+ any) eol))
+                                               (and "/*" (0+ any) "*/"))
+                            (0+ any) eol))
 (defvar bb-disass-line (rx bol
-                                (group "/" (1+ (not (any ":")))) ":"
-                                (group (1+ num))
-                                (0+ any)))
+                           (group "/" (1+ (not (any ":")))) ":"
+                           (group (1+ num))
+                           (0+ any)))
 (defvar bb-disass-label (rx bol (group (1+ (any digit "a-f")))
-                                 (1+ space) "<"
-                                 (group (1+ (not (any ">")))) ">:" eol))
+                            (1+ space) "<"
+                            (group (1+ (not (any ">")))) ">:" eol))
 (defvar bb-disass-dest (rx (0+ any) (group (1+ (any digit "a-f")))
-                                (1+ space) "<" (group (1+ (not (any ">")))) ">" eol))
+                           (1+ space) "<" (group (1+ (not (any ">")))) ">" eol))
 
 (defvar bb-disass-opcode (rx bol (0+ space) (group (1+ (any digit "a-f")))
-                                  ":" (0+ space)
-                                  (group (1+
-                                          (repeat 2
-                                                  (any digit "a-f"))
-                                          (opt " ")))
-                                  (0+ space)
-                                  (group (0+ any))))
-(defvar bb-source-file (rx bol (0+ space) ".file" (1+ space)
+                             ":" (0+ space)
+                             (group (1+
+                                     (repeat 2
+                                             (any digit "a-f"))
+                                     (opt " ")))
+                             (0+ space)
+                             (group (0+ any))))
+(defvar bb-source-file-hint (rx bol (0+ space) ".file" (1+ space)
                                 (group (1+ digit)) (1+ space) ?\"
                                 (group (1+ (not (any ?\")))) ?\"
                                 (opt (1+ space) ?\"
                                      (group (1+ (not (any ?\")))) ?\")
                                 (0+ any)))
 (defvar bb-source-tag (rx bol (0+ space) ".loc" (1+ space)
-                               (group (1+ digit)) (1+ space)
-                               (group (1+ digit))
-                               (0+ any)))
+                          (group (1+ digit)) (1+ space)
+                          (group (1+ digit))
+                          (0+ any)))
 (defvar bb-source-stab (rx bol (0+ any) ".stabn" (1+ space)
-                                (group (1+ digit)) ",0,"
-                                (group (1+ digit)) "," (0+ any)))
-
-;;;; Classes
+                           (group (1+ digit)) ",0,"
+                           (group (1+ digit)) "," (0+ any)))
 
 (cl-defstruct (bb-lang
                (:constructor make-beardbolt-lang)
                (:conc-name bb--lang-))
-  (objdumper
-   nil :documentation "Object dumper to use if disassembling binary.")
-  (demangler
-   nil :documentation "If non-nil, demangler to use for this source code")
-  (base-cmd
-   nil :documentation "")
-  (compile-cmd-function
-   nil :documentation "")
-  (asm-function
-   nil :documentation "Function to operate on an assembly listing")
-  (disass-function
-   nil :documentation "Function to operate on a binary")
-  (disass-hidden-funcs
-   nil :documentation "Regexp recognizing non-user assembly rountines."))
-
-(defmacro bb--set-local (var val)
-  "Set unquoted variable VAR to value VAL in current buffer."
-  (declare (debug (symbolp form)))
-  `(set (make-local-variable ,var) ,val))
+  (base-cmd nil :documentation "") (compile-specs nil :documentation ""))
 
 (defun bb-split-rm-single (cmd flag &optional test)
   "Remove a single FLAG from CMD.  Test according to TEST."
@@ -318,33 +241,47 @@ This function does NOT quote the return value for use in inferior shells."
            concat (and (cl-plusp i) " ")
            and concat probe and do (setq split (cdr split))))
 
-;;;; Language Functions
-;;;;; Compile Commands
-
-(cl-defun bb--c-compile-cmd ()
-  "Process a compile command for gcc/clang."
-  (let* ((cmd (or bb-command
-                  (bb--lang-base-cmd (bb--get-lang))))
-         (cmd (mapconcat #'identity
-                         (list cmd
-                               "-g"
-                               (if bb-disassemble "-c" "-S")
-                               (cond ((derived-mode-p 'c++-mode) "-x c++")
-                                     (t "-x c"))
-                               "-"
-                               "-o" (shell-quote-argument (bb-output-filename
-                                                           (current-buffer)))
-                               (when (and bb-asm-format (not bb-disassemble))
-                                 (format "-masm=%s" bb-asm-format)))
-                         " "))
-         (cmd (if (and bb-flag-quirks
-                       (string-match-p (rx "-save-temps") cmd)
-                       (string-match-p (rx "-P") cmd))
-                  (bb-split-rm-single cmd "-save-temps")
-                cmd)))
-    cmd))
-
-;;;;; Hidden Function Definitions
+(cl-defun bb--c/c++-compile-specs ()
+  "Process a compile command for gcc/clang.
+Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
+  (cl-labels ((tmp (f newext)
+                (expand-file-name
+                 (format "%s.%s" (file-name-base f) newext) (bb--temp-dir)))
+              (objdump (in)
+                (let ((out (tmp in "bb-objdumped")))
+                  `(("&&" ,bb-objdump-binary "-d" ,in
+                     "--insn-width=16" "-l"
+                     ,(when bb-asm-format
+                        (format "-M %s" bb-asm-format))
+                     ">" ,out)
+                    . ,out)))
+              (join (l &optional (sep " ")) (mapconcat #'identity l sep))
+              (munch (l) (join (mapcar #'join l) " \\\n")))
+    (let* ((direct-asm-out (tmp "beardbolt" "s"))
+           (disass-asm-out (tmp "beardbolt" "out"))
+           (base-command (ensure-list (or bb-command
+                                          (bb--lang-base-cmd (bb--get-lang)))))
+           (debug `("-g"))
+           (stdin-process `("-x" ,(if (derived-mode-p 'c++-mode) "c++" "c") "-"))
+           (direct-asm `("-S" ,(format "-masm=%s" bb-asm-format)
+                         "-o" ,direct-asm-out))
+           (disass-asm `("-c" "-o" ,disass-asm-out)))
+      `((:compile
+         ,(lambda (dump-file)
+            (cons
+             (munch `(,base-command ,stdin-process ,debug
+                                    ,direct-asm ("<" ,dump-file)))
+             direct-asm-out))
+         ,#'bb--process-asm)
+        (:compile-assemble-disassemble
+         ,(lambda (dump-file)
+            (let* ((objdump-pair (objdump disass-asm-out)))
+              (cons
+               (munch `(,base-command ,stdin-process ,debug
+                                      ,disass-asm ("<" ,dump-file)
+                                      ,(car objdump-pair)))
+               (cdr objdump-pair))))
+         ,#'bb--process-disassembled-lines)))))
 
 (defvar bb--hidden-func-c
   (rx bol (or (and "__" (0+ any))
@@ -355,242 +292,204 @@ This function does NOT quote the return value for use in inferior shells."
               (and ".plt" (0+ any)))
       eol))
 
-;;;; Language Definitions
 (defvar bb-languages
   `((c-mode
-     . ,(make-beardbolt-lang :compile-cmd-function #'bb--c-compile-cmd
-                             :base-cmd "gcc"
-                             :objdumper 'objdump
-                             :asm-function #'bb--process-src-asm-lines
-                             :disass-function #'bb--process-disassembled-lines
-                             :demangler "c++filt"
-                             :disass-hidden-funcs bb--hidden-func-c))
+     . ,(make-beardbolt-lang :compile-specs #'bb--c/c++-compile-specs
+                             :base-cmd "gcc"))
     (c++-mode
-     . ,(make-beardbolt-lang :compile-cmd-function #'bb--c-compile-cmd
-                             :base-cmd "g++"
-                             :objdumper 'objdump
-                             :asm-function #'bb--process-src-asm-lines
-                             :disass-function #'bb--process-disassembled-lines
-                             :demangler "c++filt"
-                             :disass-hidden-funcs bb--hidden-func-c))))
-
-;;;; Macros
+     . ,(make-beardbolt-lang :compile-specs #'bb--c/c++-compile-specs
+                             :base-cmd "g++"))))
 
 (defmacro bb-with-display-buffer-no-window (&rest body)
   "Run BODY without displaying any window."
   ;; See http://debbugs.gnu.org/13594
-  `(let ((display-buffer-overriding-action
-          (if bb-hide-compile
-              (list #'display-buffer-no-window)
-            display-buffer-overriding-action)))
+  `(let ((display-buffer-overriding-action (list #'display-buffer-no-window)))
      ,@body))
 
-;;;; Functions
-;; Functions to parse and lint assembly were lifted almost directly from the compiler-explorer
+(defvar bb--demangle-cache (make-hash-table :test #'equal))
 
-(defun bb-re-seq (regexp string)
-  "Get list of all REGEXP match in STRING."
-  (save-match-data
-    (let ((pos 0)
-          matches)
-      (while (string-match regexp string pos)
-        (push (match-string 0 string) matches)
-        (setq pos (match-end 0)))
-      matches)))
+(cl-defun bb--demangle-quick (from to)
+  (let* ((s (buffer-substring-no-properties from to))
+         (probe (gethash s bb--demangle-cache)))
+    (when probe
+      (delete-region from to)
+      (goto-char from)
+      (insert probe)
+      t)))
 
-;;;;; Filter Functions
+(cl-defun bb--demangle-overlays (ovs)
+  (cl-loop
+   with rep = (lambda (ov r)
+                (with-current-buffer (overlay-buffer ov)
+                  (delete-region (overlay-start ov) (overlay-end ov))
+                  (goto-char (overlay-start ov))
+                  (insert r)
+                  (delete-overlay ov)))
+   for ov in ovs
+   for from = (overlay-start ov) for to = (overlay-end ov)
+   for s = (buffer-substring-no-properties from to)
+   for probe = (gethash s bb--demangle-cache)
+   if probe do (funcall rep ov probe)
+   else collect ov into needy-overlays
+   and collect s into needy-strings
+   and concat (format "%s\n" s) into tosend
+   finally
+   (when needy-strings
+     (with-temp-buffer
+       (save-excursion (insert tosend))
+       (shell-command-on-region (point-min) (point-max) "c++filt" t t)
+       (cl-loop for ov in needy-overlays for s in needy-strings
+                while (re-search-forward "^.*$")
+                do (funcall rep ov (puthash s (match-string 0) bb--demangle-cache)))))))
 
-;; Filtering functions were more or less lifted from the godbolt
-;; compiler explorer to maintain compatiblity.
-;; https://github.com/mattgodbolt/compiler-explorer/blob/master/lib/asm.js
-
-(defun bb--has-opcode-p (line)
-  "Check if LINE has opcodes."
-  (save-match-data
-    (let* ((match (string-match bb-label-def line))
-           (line (if match
-                     (substring line (match-end 0))
-                   line))
-           (line (cl-first (split-string line (rx (1+ (any ";#")))))))
-      (if (string-match-p bb-assignment-def line)
-          nil
-        (string-match-p bb-has-opcode line)))))
-
-(defun bb--find-used-labels (src-buffer asm-lines)
-  "Find used labels in ASM-LINES generated from SRC-BUFFER."
-  (let ((match nil)
-        (current-label nil)
-        (labels-used (make-hash-table :test #'equal))
-        (weak-usages (make-hash-table :test #'equal)))
-    (dolist (line asm-lines)
-      (setq line (string-trim-left line)
-            match (and (string-match bb-label-def line)
-                       (match-string 1 line)))
-      (when match
-        (setq current-label match))
-      (setq match (and (string-match bb-defines-global line)
-                       (match-string 1 line)))
-      (when match
-        (puthash match t labels-used))
-      ;; When we have no line or a period started line, skip
-      (unless (or (string-empty-p line)
-                  (eq (elt line 0) ?.)
-                  (not (string-match-p bb-label-find line)))
-        (if (or (not (buffer-local-value 'bb-filter-directives src-buffer))
-                (bb--has-opcode-p line)
-                (string-match-p bb-defines-function line))
-            ;; Add labels indescriminantly
-            (dolist (l (bb-re-seq bb-label-find line))
-              (puthash l t labels-used))
-          (when (and current-label
-                     (or (string-match-p bb-data-defn line)
-                         (bb--has-opcode-p line)))
-            (dolist (l (bb-re-seq bb-label-find line))
-              (cl-pushnew l (gethash current-label weak-usages) :test #'equal))))))
-
-    (let* ((max-label-iter 10)
-           (label-iter 0)
-           (completed nil))
-
-      (while (and (<= (cl-incf label-iter)
-                      max-label-iter)
-                  (not completed))
-        (let ((to-add nil))
-          (maphash
-           (lambda (label _v)
-             (dolist (now-used (gethash label weak-usages))
-               (when (not (gethash now-used labels-used))
-                 (cl-pushnew now-used to-add :test #'equal))))
-           labels-used)
-          (if to-add
-              (dolist (l to-add)
-                (puthash l t labels-used))
-            (setq completed t))))
-      labels-used)))
-
-(defun bb--user-func-p (src-buffer func)
-  "Return t if FUNC is a user function.
-Argument SRC-BUFFER source buffer."
-  (let* ((lang (with-current-buffer src-buffer (bb--get-lang)))
-         (regexp (bb--lang-disass-hidden-funcs lang)))
+(defun bb--user-func-p (func)
+  "Tell if FUNC is user's."
+  (let* ((regexp bb--hidden-func-c))
     (if regexp (not (string-match-p regexp func)) t)))
 
-;; TODO godbolt does not handle disassembly with filter=off, but we should.
-(cl-defun bb--process-disassembled-lines (src-buffer asm-lines)
-  "Process and filter disassembled ASM-LINES from SRC-BUFFER."
-  (let* ((src-file-name "<stdin>")
-         (result nil)
-         (func nil)
-         (source-linum nil))
-    (dolist (line asm-lines)
-      (catch 'continue
-        (when (and (> (length result) bb-binary-asm-limit)
-                   (not (buffer-local-value 'bb-ignore-binary-limit src-buffer)))
-          (cl-return-from bb--process-disassembled-lines
-            '("Aborting processing due to exceeding the binary limit.")))
-        (when (string-match bb-disass-line line)
-          ;; Don't add linums from files which we aren't inspecting
-          (if (equal src-file-name
-                     (file-name-base (match-string 1 line)))
-              (setq source-linum (string-to-number (match-string 2 line)))
-            (setq source-linum nil))
-          ;; We are just setting a linum, no data here.
-          (throw 'continue t))
+(defmacro bb--sweeping (&rest forms)
+  (declare (indent 0)
+           (debug (&rest (form &rest form))))
+  (let ((lbp (cl-gensym "lbp-")) (lep (cl-gensym "lep-"))
+        (preserve-directives (cl-gensym "preserve-directives-")))
+    `(let ((,preserve-directives (buffer-local-value
+                                  'bb-preserve-directives
+                                  bb--source-buffer)))
+       (goto-char (point-min))
+       (while (not (eobp))
+         (let ((,lbp (line-beginning-position)) (,lep (line-end-position)))
+           (cl-macrolet ((match (&rest res)
+                           `(cl-loop for re in ,(cons 'list res)
+                                     thereis (re-search-forward re ,',lep t)))
+                         (update-lep () `(setq ,',lep (line-end-position))))
+             (pcase (cond ,@forms)
+               (:preserve (forward-line 1))
+               (:kill (delete-region ,lbp (1+ ,lep)))
+               (_
+                (if ,preserve-directives (forward-line 1)
+                  (delete-region ,lbp (1+ ,lep)))))))))))
 
-        (when (string-match bb-disass-label line)
-          (setq func (match-string 2 line))
-          (when (bb--user-func-p src-buffer func)
-            (push (concat func ":") result))
-          (throw 'continue t))
-        (unless (and func
-                     (bb--user-func-p src-buffer func))
-          (throw 'continue t))
-        (when (string-match bb-disass-opcode line)
-          (let ((line (concat (match-string 1 line)
-                              "\t" (match-string 3 line))))
-            ;; Add line text property if available
-            (when source-linum
-              (add-text-properties 0 (length line)
-                                   `(bb-src-line ,source-linum) line))
-            (push line result))
-          (throw 'continue t))))
-    (nreverse result)))
+(cl-defun bb--process-disassembled-lines ()
+  (let* ((src-file-name "<stdin>") (func nil) (source-linum nil))
+    (bb--sweeping
+      ((match bb-disass-line)
+       (setq source-linum (and (equal src-file-name
+                                      (file-name-base (match-string 1)))
+                               (string-to-number (match-string 2))))
+       :kill)
+      ((match bb-disass-label)
+       (setq func (match-string 2))
+       (when (bb--user-func-p func) (replace-match (concat func ":")))
+       :preserve)
+      ((and func (not (bb--user-func-p func)))
+       :kill)
+      ((match bb-disass-opcode)
+       (when nil
+         (add-text-properties (line-beginning-position) (line-end-position)
+                              `(bb-src-line ,source-linum)))
+       (replace-match (concat (match-string 1) "\t" (match-string 3)))
+       (forward-line 1))
+      (t
+       :kill))))
 
-(cl-defun bb--process-src-asm-lines (src-buffer asm-lines)
-  (let* ((used-labels (bb--find-used-labels src-buffer asm-lines))
-         (src-file-name "<stdin>")
-         (result nil)
-         (prev-label nil)
-         (source-linum nil)
-         (source-file-map (make-hash-table :test #'eq)))
-    (dolist (line asm-lines)
-      (let* ((raw-match (or (string-match bb-label-def line)
-                            (string-match bb-assignment-def line)))
-             (match (when raw-match
-                      (match-string 1 line)))
-             (used-label-p (gethash match used-labels)))
-        (catch 'continue
-          (cond
-           ;; Process file name hints
-           ((string-match bb-source-file line)
-            (if (match-string 3 line)
-                ;; Clang style match
-                (puthash (string-to-number (match-string 1 line))
-                         (expand-file-name (match-string 3 line) (match-string 2 line))
-                         source-file-map)
-              (puthash (string-to-number (match-string 1 line))
-                       (match-string 2 line)
-                       source-file-map)))
-           ;; Process any line number hints
-           ((string-match bb-source-tag line)
-            (if (equal src-file-name
-                       (gethash
-                        (string-to-number (match-string 1 line))
-                        source-file-map
-                        ;; Assume we never will compile dev null :P
-                        "/dev/null"))
-                (setq source-linum (string-to-number
-                                    (match-string 2 line)))
-              (setq source-linum nil)))
-           ((string-match bb-source-stab line)
-            (pcase (string-to-number (match-string 1 line))
-              ;; http://www.math.utah.edu/docs/info/stabs_11.html
-              (68
-               (setq source-linum (match-string 2 line)))
-              ((or 100 132)
-               (setq source-linum nil)))))
-          ;; End block, reset prev-label and source
-          (when (string-match-p bb-endblock line)
-            (setq prev-label nil))
+(cl-defun bb--reachable-p (label globals graph synonyms weaks)
+  (cond ((and (not (buffer-local-value 'bb-preserve-library-functions
+                                       bb--source-buffer))
+              (gethash label weaks))
+         nil)
+        ((gethash label globals) t)
+        (t
+         (maphash (lambda (from to)
+                    (let ((synonym (gethash label synonyms)))
+                      (when (and (or (gethash label to)
+                                     (and synonym (gethash synonym to)))
+                                 (bb--reachable-p from globals graph synonyms weaks))
+                        (cl-return-from bb--reachable-p
+                          (progn
+                            (when synonym (puthash synonym t globals))
+                            (puthash label t globals))))))
+                  graph))))
 
-          (when (and (buffer-local-value 'bb-filter-comment-only src-buffer)
-                     (string-match-p bb-comment-only line))
-            (throw 'continue t))
-
-          ;; continue means we don't add to the ouptut
-          (when match
-            (if (not used-label-p)
-                ;; Unused label
-                (when (buffer-local-value 'bb-filter-labels src-buffer)
-                  (throw 'continue t))
-              ;; Real label, set prev-label
-              (setq prev-label raw-match)))
-          (when (and (buffer-local-value 'bb-filter-directives src-buffer)
-                     (not match))
-            (if  (and (string-match-p bb-data-defn line)
-                      prev-label)
-                ;; data is being used
-                nil
-              (when (string-match-p bb-directive line)
-                (throw 'continue t))))
-          ;; Add line numbers to mapping
-          (when (and source-linum
-                     (bb--has-opcode-p line))
-            (add-text-properties 0 (length line)
-                                 `(bb-src-line ,source-linum) line))
-          ;; Add line
-          (push line result))))
-    (nreverse result)))
+(defun bb--process-asm ()
+  (let ((globals (make-hash-table :test #'equal))
+        (weaks (make-hash-table :test #'equal))
+        (synonyms (make-hash-table :test #'equal))
+        (label-graph (make-hash-table :test #'equal))
+        (src-file-name "<stdin>")
+        (source-file-map (make-hash-table :test #'eq))
+        (source-linum nil)
+        global-label
+        reachable-label
+        demangle-ovs
+        (preserve-comments (buffer-local-value 'bb-preserve-comments bb--source-buffer))
+        (preserve-labels (buffer-local-value 'bb-preserve-labels bb--source-buffer)))
+    (cl-flet ((schedule-demangling-maybe (from to)
+                (when (and (eq (char-after from) ?_)
+                           (not (bb--demangle-quick from to)))
+                  (let ((ov (make-overlay from to)))
+                    (overlay-put ov 'beardbolt t)
+                    (push ov demangle-ovs)))))
+      ;; first pass
+      (bb--sweeping
+        ((match bb-data-defn) :preserve)
+        ((match bb-label-start)
+         (when (gethash (match-string 1) globals)
+           (setq global-label (match-string 1)))
+         :preserve)
+        ((match bb-source-tag)
+         (setq source-linum
+               (and (equal src-file-name
+                           (gethash
+                            (string-to-number (match-string 1))
+                            source-file-map))
+                    (string-to-number (match-string 2)))))
+        ((match bb-has-opcode)
+         (when source-linum
+           (add-text-properties
+            (match-beginning 0) (match-end 0)
+            (list 'bb-src-line source-linum)))
+         (when global-label
+           (while (match bb-label-reference)
+             (puthash (match-string 0)
+                      t
+                      (or (gethash global-label label-graph)
+                          (puthash global-label (make-hash-table :test #'equal)
+                                   label-graph)))
+             (schedule-demangling-maybe (match-beginning 0) (match-end 0))
+             (update-lep)))
+         :preserve)
+        ((and (not preserve-comments) (match bb-comment-only)) :kill)
+        ((match bb-defines-global bb-defines-function-or-object)
+         (puthash (match-string 1) t globals))
+        ((match bb-defines-weak)
+         (puthash (match-string 1) t weaks))
+        ((match bb-source-file-hint)
+         (puthash (string-to-number (match-string 1))
+                  (or (match-string 3) (match-string 2))
+                  source-file-map))
+        ((match bb-endblock) (setq global-label nil) :preserve)
+        ((match bb-set-directive)
+         (puthash (match-string 2) (match-string 1) synonyms))
+        ((match bb-source-stab)
+         (pcase (string-to-number (match-string 1))
+           ;; http://www.math.utah.edu/docs/info/stabs_11.html
+           (68 (setq source-linum (match-string 2)))
+           ((or 100 132) (setq source-linum nil)))))
+      ;; second pass
+      (setq reachable-label nil)
+      (bb--sweeping
+        ((and (match bb-data-defn bb-has-opcode) reachable-label)
+         :preserve)
+        ((match bb-label-start)
+         (cond
+          ((bb--reachable-p (match-string 1) globals label-graph synonyms weaks)
+           (setq reachable-label (match-string 1))
+           (schedule-demangling-maybe (match-beginning 0) (match-end 0))
+           :preserve)
+          (t
+           (if preserve-labels :preserve :kill))))
+        ((match bb-endblock) (setq reachable-label nil)))
+      (bb--demangle-overlays demangle-ovs))))
 
 (defun bb--rainbowize (line-mappings src-buffer)
   (let* ((background-hsl
@@ -634,102 +533,114 @@ Argument SRC-BUFFER source buffer."
                 (overlay-put ov 'beardbolt t)
                 (overlay-put ov 'priority 0)))))))
      line-mappings)
- (mapc #'delete-overlay bb--rainbow-overlays)
+    (mapc #'delete-overlay bb--rainbow-overlays)
     (setq-local bb--rainbow-overlays all-ovs)))
 
+(cl-defmacro bb--when-live-buffer (buf &rest body)
+  "Check BUF live, then do BODY in it." (declare (indent 1) (debug t))
+  (let ((b (cl-gensym)))
+    `(let ((,b ,buf)) (if (buffer-live-p ,b) (with-current-buffer ,b ,@body)))))
+
 (defun bb--delete-rainbow-overlays ()
+  (bb--when-live-buffer bb--source-buffer
+    (save-restriction
+      (widen)
+      (cl-loop for o in (overlays-in (point-min) (point-max))
+               when (overlay-get o 'beardbolt) do (delete-overlay o))))
   (mapc #'delete-overlay bb--rainbow-overlays)
   (setq bb--rainbow-overlays nil))
 
-(defun bb--make-line-mappings (lines)
+(defun bb--make-line-mappings ()
   (let ((linum 1)
         (start-match nil)
         (in-match nil)
         (ht (make-hash-table)))
-    (dolist (line lines)
-      (let ((property (get-text-property 0 'bb-src-line line)))
-        (progn
-          (cl-tagbody
-           run-conditional
-           (cond
-            ((and in-match (eq in-match property))
-             ;; We are continuing an existing match
-             nil)
-            (in-match
-             ;; We are in a match that has just expired
-             (push (cons start-match (1- linum))
-                   (cl-getf (gethash in-match ht) :lines))
-             (setq in-match nil
-                   start-match nil)
-             (go run-conditional))
-            (property
-             (setq in-match property
-                   start-match linum))))))
-      (cl-incf linum))
+    (save-excursion
+      (goto-char (point-min))
+      (while (not (eobp))
+        (let ((property (get-text-property (point) 'bb-src-line)))
+          (progn
+            (cl-tagbody
+             run-conditional
+             (cond
+              ((and in-match (eq in-match property))
+               ;; We are continuing an existing match
+               nil)
+              (in-match
+               ;; We are in a match that has just expired
+               (push (cons start-match (1- linum))
+                     (cl-getf (gethash in-match ht) :lines))
+               (setq in-match nil
+                     start-match nil)
+               (go run-conditional))
+              (property
+               (setq in-match property
+                     start-match linum))))))
+        (cl-incf linum)
+        (forward-line 1)))
     (maphash (lambda (_k asm-regions)
-             (save-excursion
-               (plist-put
-                asm-regions
-                :positions
-                (cl-loop
-                 for (begl . endl) in (cl-getf asm-regions :lines)
-                 collect (cons (progn
-                                 (goto-char (point-min))
-                                 (forward-line (1- begl))
-                                 (line-beginning-position))
-                               (progn
-                                 (forward-line (- endl begl))
-                                 (line-end-position)))))))
-           ht)
+               (save-excursion
+                 (plist-put
+                  asm-regions
+                  :positions
+                  (cl-loop
+                   for (begl . endl) in (cl-getf asm-regions :lines)
+                   collect (cons (progn
+                                   (goto-char (point-min))
+                                   (forward-line (1- begl))
+                                   (line-beginning-position))
+                                 (progn
+                                   (forward-line (- endl begl))
+                                   (line-end-position)))))))
+             ht)
     ht))
 
 ;;;;; Handlers
-(cl-defun bb--handle-finish-compile (compilation-buffer str &key override-buffer)
+(cl-defun bb--handle-finish-compile (compilation-buffer str)
   "Finish hook for compilations.  Runs in buffer COMPILATION-BUFFER.
-Argument STR compilation finish status.
-Argument OVERRIDE-BUFFER asm src buffer to use instead of reading
-   `bb-output-filename'."
+Argument STR compilation finish status."
   (delete-file bb--dump-file)
-  (let ((src-buffer bb--source-buffer))
-    (with-current-buffer (bb--output-buffer src-buffer)
+  (let* ((src-buffer bb--source-buffer)
+         (compile-spec bb--compile-spec)
+         (declared-output bb--declared-output)
+         (output-buffer (bb--output-buffer src-buffer))
+         (split-width-threshold (min split-width-threshold 100)))
+    (with-current-buffer output-buffer
+      (asm-mode)
+      (font-lock-mode -1)
+      (setq bb--source-buffer src-buffer)
+      (bb--output-mode)
+      (buffer-disable-undo)
       ;; Store src buffer value for later linking
       (cond
        ((string-match "^finished" str)
-        (if (and (not override-buffer)
-                 (not (file-exists-p (bb-output-filename src-buffer t))))
-            (message "Error reading from output file.")
-          (let* ((lang (with-current-buffer src-buffer (bb--get-lang)))
-                 (unfiltered-lines
-                  (or (when override-buffer
-                        (with-current-buffer override-buffer
-                          (split-string (buffer-string) "\n" nil)))
-                      (with-temp-buffer
-                        (insert-file-contents (bb-output-filename src-buffer t))
-                        (split-string (buffer-string) "\n" nil))))
-                 (lines
-                  (funcall (if (with-current-buffer src-buffer bb-disassemble)
-                               (bb--lang-disass-function lang)
-                             (bb--lang-asm-function lang))
-                           src-buffer unfiltered-lines)))
-            (display-buffer (current-buffer) '(nil (inhibit-same-window . t)))
-            ;; Replace buffer contents but save point and scroll
-            (let* ((window (get-buffer-window))
-                   (old-point (and window (window-point window)))
-                   (old-window-start (and window (window-start window))))
-              (erase-buffer)
-              (insert (mapconcat #'identity lines "\n"))
-              (when window
-                (set-window-start window old-window-start)
-                (set-window-point window old-point)))
-            (setq bb-line-mappings (bb--make-line-mappings lines))
-            (bb--rainbowize bb-line-mappings src-buffer))))
+        (display-buffer (current-buffer) `(() (inhibit-same-window . t)))
+        ;; Replace buffer contents but save point and scroll
+        (let* ((output-window (get-buffer-window))
+               (old-point (and output-window (window-point output-window)))
+               (old-window-start (and output-window (window-start output-window))))
+          (erase-buffer)
+          (mapc #'delete-overlay (overlays-in (point-min) (point-max)))
+          (insert-file-contents declared-output)
+          (cond ((eq
+                  t (while-no-input
+                      (save-excursion (funcall (cadr compile-spec)))))
+                 (erase-buffer)
+                 (insert "Interrupted!"))
+                (t
+                 (when output-window
+                   (set-window-start output-window old-window-start)
+                   (set-window-point output-window old-point))
+                 (setq bb--line-mappings (bb--make-line-mappings))
+                 (bb--rainbowize bb--line-mappings src-buffer)
+                 (font-lock-mode 1))))
+        (when-let ((w (get-buffer-window compilation-buffer)))
+          (quit-window nil w)))
        (t
-        ;; Display compilation buffer
-        (display-buffer compilation-buffer '(nil (inhibit-same-window . t)))
-        ;; output no longer up-to-date, kill output buffer
-        ;; immediately.  This also tears down relation overlays
-        ;; in the source buffer, if any.
-        (kill-buffer (current-buffer)))))))
+        (when-let ((w (get-buffer-window)))
+          (quit-window t w))
+        (unless (string-match "^interrupt" str)
+          (display-buffer compilation-buffer '(nil (inhibit-same-window . t)))))))))
 
 ;;;;; Parsing Options
 (defvar-local bb--language-descriptor nil)
@@ -737,29 +648,6 @@ Argument OVERRIDE-BUFFER asm src buffer to use instead of reading
   "Helper function to get lang def for LANGUAGE."
   (or bb--language-descriptor
       (cdr (assoc major-mode bb-languages))))
-
-(defun bb--demangle-command (existing-cmd lang src-buffer)
-  "Append a demangler routine to EXISTING-CMD with LANG and SRC-BUFFER
-and return it."
-  (if-let ((to-demangle (buffer-local-value 'bb-demangle src-buffer))
-           (demangler (bb--lang-demangler lang))
-           (demangler-exists (executable-find demangler)))
-      (concat existing-cmd " "
-              (mapconcat
-               #'identity
-               (list "&&" demangler
-                     "<" (bb-output-filename src-buffer t)
-                     ">" (expand-file-name "tmp.s" (bb--temp-dir))
-                     "&&" "mv"
-                     (expand-file-name "tmp.s" (bb--temp-dir))
-                     (bb-output-filename src-buffer t))
-               " "))
-    existing-cmd))
-
-(cl-defmacro bb--when-live-buffer (buf &rest body)
-  "Check BUF live, then do BODY in it." (declare (indent 1) (debug t))
-  (let ((b (cl-gensym)))
-    `(let ((,b ,buf)) (if (buffer-live-p ,b) (with-current-buffer ,b ,@body)))))
 
 (defun bb--compilation-buffer (&rest _)
   (get-buffer-create "*bb-compilation*"))
@@ -778,29 +666,17 @@ Interactively, determine LANG from `major-mode'."
                  (error "[beardbolt] Some variables risky %s" risky-vars)))))
     (hack-local-variables))
   (let* ((dump-file
-          (make-temp-file "beardbolt-dump-" nil
-                          (concat "." (file-name-extension buffer-file-name))
-                          (buffer-string)))
+          (let ((inhibit-message t))
+            (make-temp-file "beardbolt-dump-" nil
+                            (concat "." (file-name-extension buffer-file-name))
+                            (buffer-string))))
          (src-buffer (current-buffer))
-         (func (bb--lang-compile-cmd-function lang))
-         (cmd (concat (funcall func) " < " dump-file)))
-    (when bb-disassemble
-      (pcase (bb--lang-objdumper lang)
-        ('objdump
-         (setq cmd
-               (mapconcat #'identity
-                          (list cmd
-                                "&&"
-                                bb-objdump-binary "-d" (bb-output-filename src-buffer)
-                                "-C" "--insn-width=16" "-l"
-                                (when bb-asm-format
-                                 (format "-M %s" bb-asm-format))
-                                ">" (bb-output-filename src-buffer t))
-                          " ")))
-        (_
-         (error "Objdumper not recognized"))))
-    ;; Convert to demangle if we need to
-    (setq cmd (bb--demangle-command cmd lang src-buffer))
+         (specs (funcall (bb--lang-compile-specs lang)))
+         (spec (alist-get
+                (if bb-disassemble :compile-assemble-disassemble :compile)
+                specs))
+         (command-and-declared-output (funcall (car spec) dump-file))
+         (cmd (car command-and-declared-output)))
     (with-current-buffer ; With compilation buffer
         (let ((shell-file-name (or (executable-find bb--shell)
                                    shell-file-name))
@@ -810,15 +686,23 @@ Interactively, determine LANG from `major-mode'."
            (compilation-start cmd nil #'bb--compilation-buffer)))
       ;; Only jump to errors, skip over warnings
       (setq-local compilation-skip-threshold 2)
+      (setq-local compilation-always-kill t)
       (setq-local inhibit-message t)
       (add-hook 'compilation-finish-functions
-                #'bb--handle-finish-compile nil t)
+                #'(lambda (&rest whatever)
+                    (let ((inhibit-message nil))
+                      (benchmark-progn
+                        (apply #'bb--handle-finish-compile whatever))))
+                nil t)
       (setq bb--source-buffer src-buffer)
-      (setq bb--dump-file dump-file))))
+      (setq bb--compile-spec spec)
+      (setq bb--dump-file dump-file)
+      (setq bb--declared-output (cdr command-and-declared-output)))))
 
 (defun bb--maybe-stop-running-compilation ()
   (let ((buffer (bb--compilation-buffer)))
     (when-let ((proc (get-buffer-process buffer)))
+      (set-process-query-on-exit-flag proc nil)
       (interrupt-process proc))))
 
 ;;;; Keymap
@@ -906,7 +790,7 @@ Runs in output buffer.  Sets `bb--relation-overlays'."
   (let ((linum (line-number-at-pos nil t)))
     (bb--when-live-buffer bb--output-buffer
       (bb--delete-relation-overlays)
-      (bb--synch-relation-overlays bb-line-mappings linum))))
+      (bb--synch-relation-overlays bb--line-mappings linum))))
 
 (defun bb--on-kill-source-buffer ()
   (bb--when-live-buffer bb--output-buffer
@@ -919,14 +803,14 @@ Runs in output buffer.  Sets `bb--relation-overlays'."
 (defun bb--output-buffer-pch ()
   (bb--delete-relation-overlays)
   (bb--synch-relation-overlays
-   bb-line-mappings
+   bb--line-mappings
    (get-text-property (point) 'bb-src-line)))
 
 (defvar bb--change-timer nil)
 
 (defun bb--after-change (&rest _)
   (bb--when-live-buffer bb--output-buffer
-    (clrhash bb-line-mappings))
+    (when bb--line-mappings (clrhash bb--line-mappings)))
   (when (timerp bb--change-timer) (cancel-timer bb--change-timer))
   (setq bb--change-timer (run-with-timer bb-compile-delay nil #'bb--on-change-timer)))
 
