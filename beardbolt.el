@@ -112,7 +112,7 @@ If you are not on x86, you most likely want to set this to nil."
 (defvar-local bb--compile-spec nil)
 (defvar-local bb--declared-output nil)
 (defvar-local bb--dump-file nil "Temporary file")
-(defvar-local bb--line-mappings nil "Maps source lines -> asm regions")
+(defvar-local bb--line-mappings (make-hash-table) "Maps source lines -> asm regions")
 (defvar-local bb--relation-overlays nil "Overlays relating source to asm.")
 (defvar-local bb--rainbow-overlays nil "Rainbow overlays.")
 
@@ -491,7 +491,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
         ((match bb-endblock) (setq reachable-label nil)))
       (bb--demangle-overlays demangle-ovs))))
 
-(cl-defun bb--rainbowize (line-mappings src-buffer)
+(cl-defun bb--rainbowize (src-buffer)
   (let* ((background-hsl
           (ignore-errors
             (apply #'color-rgb-to-hsl (color-name-to-rgb (face-background 'default)))))
@@ -499,7 +499,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
          (idx 0)
          ;; The 1+ helps us keep our hue distance from the actual
          ;; background color
-         (total (1+ (hash-table-count line-mappings))))
+         (total (1+ (hash-table-count bb--line-mappings))))
     (unless background-hsl (cl-return-from bb--rainbowize nil))
     (maphash
      (lambda (src-line asm-regions)
@@ -534,9 +534,9 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
                 (overlay-put ov 'face `(:background ,color))
                 (overlay-put ov 'beardbolt t)
                 (overlay-put ov 'priority 0)))))))
-     line-mappings)
+     bb--line-mappings)
     (mapc #'delete-overlay bb--rainbow-overlays)
-    (setq-local bb--rainbow-overlays all-ovs)))
+    (setq bb--rainbow-overlays all-ovs)))
 
 (cl-defmacro bb--when-live-buffer (buf &rest body)
   "Check BUF live, then do BODY in it." (declare (indent 1) (debug t))
@@ -556,7 +556,8 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
   (let ((linum 1)
         (start-match nil)
         (in-match nil)
-        (ht (make-hash-table)))
+        (ht bb--line-mappings))
+    (clrhash ht)
     (save-excursion
       (goto-char (point-min))
       (while (not (eobp))
@@ -633,8 +634,8 @@ Argument STR compilation finish status."
                  (when output-window
                    (set-window-start output-window old-window-start)
                    (set-window-point output-window old-point))
-                 (setq bb--line-mappings (bb--make-line-mappings))
-                 (bb--rainbowize bb--line-mappings src-buffer)
+                 (bb--make-line-mappings)
+                 (bb--rainbowize src-buffer)
                  (font-lock-mode 1))))
         (when-let ((w (get-buffer-window compilation-buffer)))
           (quit-window nil w)))
@@ -756,13 +757,12 @@ Interactively, determine LANG from `major-mode'."
            do (set-window-point w pos)
            (with-selected-window w (recenter))))
 
-(defun bb--synch-relation-overlays (mapping source-line)
+(defun bb--synch-relation-overlays (source-line)
   "Update overlays to visually match selected source and asm lines.
 Runs in output buffer.  Sets `bb--relation-overlays'."
   (bb--delete-relation-overlays)
-  (setq bb--relation-overlays nil)
-  (let (ovs
-        (positions (plist-get (gethash source-line mapping) :positions)))
+  (let ((positions (plist-get (gethash source-line bb--line-mappings)
+                              :positions)))
     (when positions
       (bb--when-live-buffer bb--source-buffer
         (save-excursion
@@ -772,12 +772,11 @@ Runs in output buffer.  Sets `bb--relation-overlays'."
              (bb--make-relation-overlay
               (line-beginning-position source-line)
               (line-end-position source-line)))
-           ovs))
-        (bb--recenter-maybe (overlay-start (car ovs))))
+           bb--relation-overlays))
+        (bb--recenter-maybe (overlay-start (car bb--relation-overlays))))
       (cl-loop for (start . end) in positions
-               do (push (bb--make-relation-overlay start end) ovs)
-               finally (bb--recenter-maybe (caar positions)))
-      (setq bb--relation-overlays ovs))))
+               do (push (bb--make-relation-overlay start end) bb--relation-overlays)
+               finally (bb--recenter-maybe (caar positions))))))
 
 (defun bb--delete-relation-overlays ()
   (mapc #'delete-overlay bb--relation-overlays)
@@ -786,8 +785,7 @@ Runs in output buffer.  Sets `bb--relation-overlays'."
 (defun bb--source-buffer-pch ()
   (let ((linum (line-number-at-pos nil t)))
     (bb--when-live-buffer bb--output-buffer
-      (bb--delete-relation-overlays)
-      (bb--synch-relation-overlays bb--line-mappings linum))))
+      (bb--synch-relation-overlays linum))))
 
 (defun bb--on-kill-source-buffer ()
   (bb--when-live-buffer bb--output-buffer
@@ -798,10 +796,7 @@ Runs in output buffer.  Sets `bb--relation-overlays'."
   (bb--delete-rainbow-overlays))
 
 (defun bb--output-buffer-pch ()
-  (bb--delete-relation-overlays)
-  (bb--synch-relation-overlays
-   bb--line-mappings
-   (get-text-property (point) 'bb-src-line)))
+  (bb--synch-relation-overlays (get-text-property (point) 'bb-src-line)))
 
 (defvar bb--change-timer nil)
 
