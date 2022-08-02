@@ -1,27 +1,21 @@
+#include <string.h>
 #include <stdio.h>
 
-// C beardbolt starter file
-
-// Local Variables:
-// beardbolt-command: "gcc -O0"
-// beardbolt-disassemble: nil
-// End:
-
-int isRMS(int a) {
-	 switch (a) {
-	 case 'R':
-		  return 1;
-	 case 'M':
-		  return 2;
-	 case 'S':
-		  return 3;
-	 default:
-		  return 0;
-	 }
+int main(int argc, char *argv[]) {
+        if(argc==2) {
+		printf("Checking License: %s\n", argv[1]);
+		if(strcmp(argv[1], "AAAA-Z10N-42-OK")==0) {
+			printf("Access Granted!\n");
+		} else {
+			printf("WRONG!\n");
+		}
+	} else {
+		printf("Usage: <key>\n");
+	}
+	return 0;
 }
 
-int main() {
-		char a = 1 + 1;
-		if (isRMS(a))
-			 printf("%c\n", a);
-}
+/* Local Variables: */
+/* beardbolt-command: "gcc -O3" */
+/* rmsbolt-command: "gcc -O3" */
+/* End: */

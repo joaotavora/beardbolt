@@ -1084,7 +1084,7 @@ public:
 private:
   std::string mString;
 };
-
+/* fonix caa*/
 template class String<int>;
 
 // Local Variables:
