@@ -491,14 +491,16 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
         ((match bb-endblock) (setq reachable-label nil)))
       (bb--demangle-overlays demangle-ovs))))
 
-(defun bb--rainbowize (line-mappings src-buffer)
+(cl-defun bb--rainbowize (line-mappings src-buffer)
   (let* ((background-hsl
-          (apply #'color-rgb-to-hsl (color-name-to-rgb (face-background 'default))))
+          (ignore-errors
+            (apply #'color-rgb-to-hsl (color-name-to-rgb (face-background 'default)))))
          all-ovs
          (idx 0)
          ;; The 1+ helps us keep our hue distance from the actual
          ;; background color
          (total (1+ (hash-table-count line-mappings))))
+    (unless background-hsl (cl-return-from bb--rainbowize nil))
     (maphash
      (lambda (src-line asm-regions)
        (when (not (zerop src-line))
@@ -661,9 +663,9 @@ Interactively, determine LANG from `major-mode'."
   (cl-letf (((symbol-function 'hack-local-variables-confirm)
              (lambda (_all-vars unsafe-vars risky-vars &rest _)
                (when unsafe-vars
-                 (error "[beardbolt] Some variables unsafe %s" unsafe-vars))
+                 (message "[beardbolt] Some variables unsafe %s" unsafe-vars))
                (when risky-vars
-                 (error "[beardbolt] Some variables risky %s" risky-vars)))))
+                 (message "[beardbolt] Some variables risky %s" risky-vars)))))
     (hack-local-variables))
   (let* ((dump-file
           (let ((inhibit-message t))
@@ -688,12 +690,7 @@ Interactively, determine LANG from `major-mode'."
       (setq-local compilation-skip-threshold 2)
       (setq-local compilation-always-kill t)
       (setq-local inhibit-message t)
-      (add-hook 'compilation-finish-functions
-                #'(lambda (&rest whatever)
-                    (let ((inhibit-message nil))
-                      (benchmark-progn
-                        (apply #'bb--handle-finish-compile whatever))))
-                nil t)
+      (add-hook 'compilation-finish-functions #'bb--handle-finish-compile nil t)
       (setq bb--source-buffer src-buffer)
       (setq bb--compile-spec spec)
       (setq bb--dump-file dump-file)
