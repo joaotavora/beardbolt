@@ -393,22 +393,22 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
        :kill))))
 
 (cl-defun bb--reachable-p (label globals graph synonyms weaks)
-  (cond ((and (not (buffer-local-value 'bb-preserve-library-functions
-                                       bb--source-buffer))
-              (gethash label weaks))
-         nil)
-        ((gethash label globals) t)
-        (t
-         (maphash (lambda (from to)
-                    (let ((synonym (gethash label synonyms)))
+  (let ((synonym (gethash label synonyms)))
+    (cond ((and (not (buffer-local-value 'bb-preserve-library-functions
+                                         bb--source-buffer))
+                (gethash label weaks))
+           nil)
+          ((gethash label globals) t)
+          (t
+           (maphash (lambda (from to)
                       (when (and (or (gethash label to)
                                      (and synonym (gethash synonym to)))
                                  (bb--reachable-p from globals graph synonyms weaks))
                         (cl-return-from bb--reachable-p
                           (progn
                             (when synonym (puthash synonym t globals))
-                            (puthash label t globals))))))
-                  graph))))
+                            (puthash label t globals)))))
+                    graph)))))
 
 (defun bb--process-asm ()
   (let ((globals (make-hash-table :test #'equal))
