@@ -29,7 +29,16 @@ corresponds to, and vice versa.
 
 ### Installation
 
+```sh
+cd /path/to/beardbolt-clone
+make
+```
+
 ```lisp
 (add-to-list 'load-path "/path/to/beardbolt-clone")
 (require 'beardbolt)
+```
+
+```
+M-x beardbolt-starter
 ```
