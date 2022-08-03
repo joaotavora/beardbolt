@@ -361,6 +361,14 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
            (cl-macrolet ((match (&rest res)
                            `(cl-loop for re in ,(cons 'list res)
                                      thereis (re-search-forward re ,',lep t)))
+                         (match-label (re)
+                           `(and (not (eq (char-after) ?\t))
+                                 (re-search-forward ,re ,',lep t)))
+                         (match-nolabel (&rest res)
+                           `(and
+                             (eq (char-after) ?\t)
+                             (cl-loop for re in ,(cons 'list res)
+                                     thereis (re-search-forward re ,',lep t))))
                          (update-lep () `(setq ,',lep (line-end-position))))
              (pcase (cond ,@forms)
                (:preserve (forward-line 1))
@@ -430,19 +438,19 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
                     (push ov demangle-ovs)))))
       ;; first pass
       (bb--sweeping
-        ((match bb-data-defn) :preserve)
-        ((match bb-label-start)
+        ((match-nolabel bb-data-defn) :preserve)
+        ((match-label bb-label-start)
          (when (intern-soft (match-string 1) globals)
            (setq global-label (match-string 1)))
          :preserve)
-        ((match bb-source-tag)
+        ((match-nolabel bb-source-tag)
          (setq source-linum
                (and (equal src-file-name
                            (gethash
                             (string-to-number (match-string 1))
                             source-file-map))
                     (string-to-number (match-string 2)))))
-        ((match bb-has-opcode)
+        ((match-nolabel bb-has-opcode)
          (when source-linum
            (add-text-properties
             (match-beginning 0) (match-end 0)
@@ -456,19 +464,19 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
              (schedule-demangling-maybe (match-beginning 0) (match-end 0))
              (update-lep)))
          :preserve)
-        ((and (not preserve-comments) (match bb-comment-only)) :kill)
-        ((match bb-defines-global bb-defines-function-or-object)
+        ((and (not preserve-comments) (match-nolabel bb-comment-only)) :kill)
+        ((match-nolabel bb-defines-global bb-defines-function-or-object)
          (intern (match-string 1) globals))
-        ((and (not preserve-weak-symbols) (match bb-defines-weak))
+        ((and (not preserve-weak-symbols) (match-nolabel bb-defines-weak))
          (intern (match-string 1) weaks))
-        ((match bb-source-file-hint)
+        ((match-nolabel bb-source-file-hint)
          (puthash (string-to-number (match-string 1))
                   (or (match-string 3) (match-string 2))
                   source-file-map))
-        ((match bb-endblock) (setq global-label nil) :preserve)
-        ((match bb-set-directive)
+        ((match-nolabel bb-endblock) (setq global-label nil) :preserve)
+        ((match-nolabel bb-set-directive)
          (puthash (match-string 2) (match-string 1) synonyms))
-        ((match bb-source-stab)
+        ((match-nolabel bb-source-stab)
          (pcase (string-to-number (match-string 1))
            ;; http://www.math.utah.edu/docs/info/stabs_11.html
            (68 (setq source-linum (match-string 2)))
@@ -476,9 +484,9 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
       ;; second pass
       (setq reachable-label nil)
       (bb--sweeping
-        ((and (match bb-data-defn bb-has-opcode) reachable-label)
+        ((and (match-nolabel bb-data-defn bb-has-opcode) reachable-label)
          :preserve)
-        ((match bb-label-start)
+        ((match-label bb-label-start)
          (cond
           ((bb--reachable-p (match-string 1) globals label-graph synonyms
                             (unless preserve-weak-symbols weaks))
@@ -487,7 +495,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
            :preserve)
           (t
            (if preserve-labels :preserve :kill))))
-        ((match bb-endblock) (setq reachable-label nil)))
+        ((match-nolabel bb-endblock) (setq reachable-label nil)))
       (bb--demangle-overlays demangle-ovs))))
 
 (cl-defun bb--rainbowize (src-buffer)
