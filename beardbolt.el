@@ -610,7 +610,6 @@ Argument STR compilation finish status."
          (split-width-threshold (min split-width-threshold 100)))
     (with-current-buffer output-buffer
       (asm-mode)
-      (font-lock-mode -1)
       (setq bb--source-buffer src-buffer)
       (bb--output-mode)
       (buffer-disable-undo)
@@ -620,6 +619,7 @@ Argument STR compilation finish status."
         (display-buffer (current-buffer) `(() (inhibit-same-window . t)))
         ;; Replace buffer contents but save point and scroll
         (let* ((output-window (get-buffer-window))
+               (inhibit-modification-hooks t)
                (old-point (and output-window (window-point output-window)))
                (old-window-start (and output-window (window-start output-window))))
           (erase-buffer)
@@ -635,8 +635,7 @@ Argument STR compilation finish status."
                    (set-window-start output-window old-window-start)
                    (set-window-point output-window old-point))
                  (bb--make-line-mappings)
-                 (bb--rainbowize src-buffer)
-                 (font-lock-mode 1))))
+                 (bb--rainbowize src-buffer))))
         (when-let ((w (get-buffer-window compilation-buffer)))
           (quit-window nil w)))
        (t
