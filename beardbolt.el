@@ -261,7 +261,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
            (disass-asm-out (tmp "beardbolt" "out"))
            (base-command (ensure-list (or bb-command
                                           (bb--lang-base-cmd (bb--get-lang)))))
-           (debug `("-g"))
+           (debug `("-g1"))
            (stdin-process `("-x" ,(if (derived-mode-p 'c++-mode) "c++" "c") "-"))
            (direct-asm `("-S" ,(format "-masm=%s" bb-asm-format)
                          "-o" ,direct-asm-out))
