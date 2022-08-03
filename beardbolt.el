@@ -394,25 +394,23 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
 
 (cl-defun bb--reachable-p (label globals graph synonyms weaks)
   (let ((synonym (gethash label synonyms)))
-    (cond ((and (not (buffer-local-value 'bb-preserve-library-functions
-                                         bb--source-buffer))
-                (gethash label weaks))
+    (cond ((and weaks (intern-soft label weaks))
            nil)
-          ((gethash label globals) t)
+          ((intern-soft label globals) t)
           (t
            (maphash (lambda (from to)
-                      (when (and (or (gethash label to)
-                                     (and synonym (gethash synonym to)))
+                      (when (and (or (intern-soft label to)
+                                     (and synonym (intern-soft synonym to)))
                                  (bb--reachable-p from globals graph synonyms weaks))
                         (cl-return-from bb--reachable-p
                           (progn
-                            (when synonym (puthash synonym t globals))
-                            (puthash label t globals)))))
+                            (when synonym (intern synonym globals))
+                            (intern label globals)))))
                     graph)))))
 
 (defun bb--process-asm ()
-  (let ((globals (make-hash-table :test #'equal))
-        (weaks (make-hash-table :test #'equal))
+  (let ((globals (obarray-make))
+        (weaks (obarray-make))
         (synonyms (make-hash-table :test #'equal))
         (label-graph (make-hash-table :test #'equal))
         (src-file-name "<stdin>")
@@ -422,7 +420,8 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
         reachable-label
         demangle-ovs
         (preserve-comments (buffer-local-value 'bb-preserve-comments bb--source-buffer))
-        (preserve-labels (buffer-local-value 'bb-preserve-labels bb--source-buffer)))
+        (preserve-labels (buffer-local-value 'bb-preserve-labels bb--source-buffer))
+        (preserve-library-functions (buffer-local-value 'bb-preserve-library-functions bb--source-buffer)))
     (cl-flet ((schedule-demangling-maybe (from to)
                 (when (and (eq (char-after from) ?_)
                            (not (bb--demangle-quick from to)))
@@ -433,7 +432,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
       (bb--sweeping
         ((match bb-data-defn) :preserve)
         ((match bb-label-start)
-         (when (gethash (match-string 1) globals)
+         (when (intern-soft (match-string 1) globals)
            (setq global-label (match-string 1)))
          :preserve)
         ((match bb-source-tag)
@@ -450,19 +449,18 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
             (list 'bb-src-line source-linum)))
          (when global-label
            (while (match bb-label-reference)
-             (puthash (match-string 0)
-                      t
-                      (or (gethash global-label label-graph)
-                          (puthash global-label (make-hash-table :test #'equal)
-                                   label-graph)))
+             (intern (match-string 0)
+                     (or (gethash global-label label-graph)
+                         (puthash global-label (obarray-make)
+                                  label-graph)))
              (schedule-demangling-maybe (match-beginning 0) (match-end 0))
              (update-lep)))
          :preserve)
         ((and (not preserve-comments) (match bb-comment-only)) :kill)
         ((match bb-defines-global bb-defines-function-or-object)
-         (puthash (match-string 1) t globals))
-        ((match bb-defines-weak)
-         (puthash (match-string 1) t weaks))
+         (intern (match-string 1) globals))
+        ((and (not preserve-library-functions) (match bb-defines-weak))
+         (intern (match-string 1) weaks))
         ((match bb-source-file-hint)
          (puthash (string-to-number (match-string 1))
                   (or (match-string 3) (match-string 2))
@@ -482,7 +480,8 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
          :preserve)
         ((match bb-label-start)
          (cond
-          ((bb--reachable-p (match-string 1) globals label-graph synonyms weaks)
+          ((bb--reachable-p (match-string 1) globals label-graph synonyms
+                            (unless preserve-library-functions weaks))
            (setq reachable-label (match-string 1))
            (schedule-demangling-maybe (match-beginning 0) (match-end 0))
            :preserve)
