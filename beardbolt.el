@@ -666,11 +666,8 @@ Interactively, determine LANG from `major-mode'."
                (when risky-vars
                  (message "[beardbolt] Some variables risky %s" risky-vars)))))
     (hack-local-variables))
-  (let* ((dump-file
-          (let ((inhibit-message t))
-            (make-temp-file "beardbolt-dump-" nil
-                            (concat "." (file-name-extension buffer-file-name))
-                            (buffer-string))))
+  (let* ((dump-file (make-temp-file "beardbolt-dump-" nil
+                                    (concat "." (file-name-extension buffer-file-name))))
          (src-buffer (current-buffer))
          (specs (funcall (bb--lang-compile-specs lang)))
          (spec (alist-get
@@ -678,6 +675,8 @@ Interactively, determine LANG from `major-mode'."
                 specs))
          (command-and-declared-output (funcall (car spec) dump-file))
          (cmd (car command-and-declared-output)))
+    (let ((inhibit-message t))
+      (write-region (point-min) (point-max) dump-file))
     (with-current-buffer ; With compilation buffer
         (let ((shell-file-name (or (executable-find bb--shell)
                                    shell-file-name))
