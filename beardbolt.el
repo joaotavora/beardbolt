@@ -760,19 +760,20 @@ Interactively, determine LANG from `major-mode'."
   "Update overlays to visually match selected source and asm lines.
 Runs in output buffer.  Sets `bb--relation-overlays'."
   (bb--delete-relation-overlays)
-  (let ((positions (plist-get (gethash source-line bb--line-mappings)
-                              :positions)))
-    (when positions
-      (bb--when-live-buffer bb--source-buffer
-        (save-excursion
-          (push
-           (progn
-             (goto-char (point-min))
-             (bb--make-relation-overlay
-              (line-beginning-position source-line)
-              (line-end-position source-line)))
-           bb--relation-overlays))
-        (bb--recenter-maybe (overlay-start (car bb--relation-overlays))))
+  (let* ((positions (plist-get (gethash source-line bb--line-mappings)
+                               :positions))
+         (src-overlay
+          (and positions
+               (bb--when-live-buffer bb--source-buffer
+                 (save-excursion
+                   (goto-char (point-min))
+                   (forward-line (1- source-line))
+                   (bb--recenter-maybe (point))
+                   (bb--make-relation-overlay
+                    (line-beginning-position)
+                    (line-end-position)))))))
+    (when src-overlay
+      (push src-overlay bb--relation-overlays)
       (cl-loop for (start . end) in positions
                do (push (bb--make-relation-overlay start end) bb--relation-overlays)
                finally (bb--recenter-maybe (caar positions))))))
