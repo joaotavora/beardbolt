@@ -306,42 +306,6 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
   `(let ((display-buffer-overriding-action (list #'display-buffer-no-window)))
      ,@body))
 
-(defvar bb--demangle-cache (make-hash-table :test #'equal))
-
-(cl-defun bb--demangle-quick (from to)
-  (let* ((s (buffer-substring-no-properties from to))
-         (probe (gethash s bb--demangle-cache)))
-    (when probe
-      (delete-region from to)
-      (goto-char from)
-      (insert probe)
-      t)))
-
-(cl-defun bb--demangle-overlays (ovs)
-  (cl-loop
-   with rep = (lambda (ov r)
-                (with-current-buffer (overlay-buffer ov)
-                  (delete-region (overlay-start ov) (overlay-end ov))
-                  (goto-char (overlay-start ov))
-                  (insert r)
-                  (delete-overlay ov)))
-   for ov in ovs
-   for from = (overlay-start ov) for to = (overlay-end ov)
-   for s = (buffer-substring-no-properties from to)
-   for probe = (gethash s bb--demangle-cache)
-   if probe do (funcall rep ov probe)
-   else collect ov into needy-overlays
-   and collect s into needy-strings
-   and concat (format "%s\n" s) into tosend
-   finally
-   (when needy-strings
-     (with-temp-buffer
-       (save-excursion (insert tosend))
-       (shell-command-on-region (point-min) (point-max) "c++filt" t t)
-       (cl-loop for ov in needy-overlays for s in needy-strings
-                while (re-search-forward "^.*$")
-                do (funcall rep ov (puthash s (match-string 0) bb--demangle-cache)))))))
-
 (defun bb--user-func-p (func)
   "Tell if FUNC is user's."
   (let* ((regexp bb--hidden-func-c))
@@ -351,10 +315,12 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
   (declare (indent 0)
            (debug (&rest (form &rest form))))
   (let ((lbp (cl-gensym "lbp-")) (lep (cl-gensym "lep-"))
-        (preserve-directives (cl-gensym "preserve-directives-")))
+        (preserve-directives (cl-gensym "preserve-directives-"))
+        (linum (cl-gensym "linum-")))
     `(let ((,preserve-directives (buffer-local-value
                                   'bb-preserve-directives
-                                  bb--source-buffer)))
+                                  bb--source-buffer))
+           (,linum 1))
        (goto-char (point-min))
        (while (not (eobp))
          (let ((,lbp (line-beginning-position)) (,lep (line-end-position)))
@@ -369,12 +335,16 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
                              (eq (char-after) ?\t)
                              (cl-loop for re in ,(cons 'list res)
                                      thereis (re-search-forward re ,',lep t))))
-                         (update-lep () `(setq ,',lep (line-end-position))))
+                         (update-lep () `(setq ,',lep (line-end-position)))
+                         (asm-linum () ',linum)
+                         (preserve () `(progn
+                                         (forward-line 1)
+                                         (setq ,',linum (1+ ,',linum)))))
              (pcase (cond ,@forms)
-               (:preserve (forward-line 1))
+               (:preserve (preserve))
                (:kill (delete-region ,lbp (1+ ,lep)))
                (_
-                (if ,preserve-directives (forward-line 1)
+                (if ,preserve-directives (preserve)
                   (delete-region ,lbp (1+ ,lep)))))))))))
 
 (cl-defun bb--process-disassembled-lines ()
@@ -396,53 +366,72 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
          (add-text-properties (line-beginning-position) (line-end-position)
                               `(bb-src-line ,source-linum)))
        (replace-match (concat (match-string 1) "\t" (match-string 3)))
-       (forward-line 1))
-      (t
-       :kill))))
-
-(cl-defun bb--reachable-p (label globals graph synonyms weaks)
-  (let ((synonym (gethash label synonyms)))
-    (cond ((and weaks (intern-soft label weaks))
-           nil)
-          ((intern-soft label globals) t)
-          (t
-           (maphash (lambda (from to)
-                      (when (and (or (intern-soft label to)
-                                     (and synonym (intern-soft synonym to)))
-                                 (bb--reachable-p from globals graph synonyms weaks))
-                        (cl-return-from bb--reachable-p
-                          (progn
-                            (when synonym (intern synonym globals))
-                            (intern label globals)))))
-                    graph)))))
+       (forward-line 1)))))
 
 (defun bb--process-asm ()
-  (let ((globals (obarray-make))
-        (weaks (obarray-make))
+  (let ((used-labels (obarray-make))
         (synonyms (make-hash-table :test #'equal))
-        (label-graph (make-hash-table :test #'equal))
         (src-file-name "<stdin>")
         (source-file-map (make-hash-table :test #'eq))
-        (source-linum nil)
+        source-linum
+        source-chunk
         global-label
         reachable-label
-        demangle-ovs
         (preserve-comments (buffer-local-value 'bb-preserve-comments bb--source-buffer))
         (preserve-labels (buffer-local-value 'bb-preserve-labels bb--source-buffer))
-        (preserve-weak-symbols (buffer-local-value 'bb-preserve-weak-symbols bb--source-buffer)))
-    (cl-flet ((schedule-demangling-maybe (from to)
-                (when (and (eq (char-after from) ?_)
-                           (not (bb--demangle-quick from to)))
-                  (let ((ov (make-overlay from to)))
-                    (overlay-put ov 'beardbolt t)
-                    (push ov demangle-ovs)))))
-      ;; first pass
+        (preserve-weak-symbols (buffer-local-value 'bb-preserve-weak-symbols bb--source-buffer))
+        (demangle (buffer-local-value 'bb-demangle bb--source-buffer)))
+    (bb--sweeping
+      ((match-label bb-label-start)
+       (when (intern-soft (match-string 1) used-labels)
+         (setq global-label (match-string 1)))
+       :preserve)
+      ((match-nolabel bb-has-opcode)
+       (when global-label
+         (while (match bb-label-reference)
+           (intern (match-string 0) used-labels)))
+       :preserve)
+      ((and (not preserve-comments) (match-nolabel bb-comment-only)) :kill)
+      ((match-nolabel bb-defines-global bb-defines-function-or-object)
+       (intern (match-string 1) used-labels))
+      ((match-nolabel bb-source-file-hint)
+       (puthash (string-to-number (match-string 1))
+                (or (match-string 3) (match-string 2))
+                source-file-map))
+      ((match-nolabel bb-endblock) (setq global-label nil)
+       :preserve)
+      ((match-nolabel bb-set-directive)
+       (puthash (match-string 2) (match-string 1) synonyms))
+      (t :preserve))
+    ;; second pass
+    (clrhash bb--line-mappings)
+    (cl-flet ((commit ()
+                (when source-chunk
+                  (push (cdr source-chunk)
+                        (cl-getf (gethash (car source-chunk) bb--line-mappings)
+                                 :lines))
+                  (setq source-chunk nil))))
       (bb--sweeping
-        ((match-nolabel bb-data-defn) :preserve)
-        ((match-label bb-label-start)
-         (when (intern-soft (match-string 1) globals)
-           (setq global-label (match-string 1)))
+        ((and (match-nolabel bb-data-defn) reachable-label)
+         (commit)
          :preserve)
+        ((and (match-nolabel bb-has-opcode) reachable-label)
+         (cond ((and source-linum
+                     (not (eq source-linum (car source-chunk))))
+                (commit)
+                (setq source-chunk
+                      (cons source-linum (cons (asm-linum) (asm-linum)))))
+               (source-linum (setf (cddr source-chunk) (asm-linum)))
+               (t (commit)))
+         :preserve)
+        ((match-label bb-label-start)
+         (commit)
+         (cond
+          ((intern-soft (match-string 1) used-labels)
+           (setq reachable-label (match-string 1))
+           :preserve)
+          (t
+           (if preserve-labels :preserve :kill))))
         ((match-nolabel bb-source-tag)
          (setq source-linum
                (and (equal src-file-name
@@ -450,53 +439,18 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
                             (string-to-number (match-string 1))
                             source-file-map))
                     (string-to-number (match-string 2)))))
-        ((match-nolabel bb-has-opcode)
-         (when source-linum
-           (add-text-properties
-            (match-beginning 0) (match-end 0)
-            (list 'bb-src-line source-linum)))
-         (when global-label
-           (while (match bb-label-reference)
-             (intern (match-string 0)
-                     (or (gethash global-label label-graph)
-                         (puthash global-label (obarray-make)
-                                  label-graph)))
-             (schedule-demangling-maybe (match-beginning 0) (match-end 0))
-             (update-lep)))
-         :preserve)
-        ((and (not preserve-comments) (match-nolabel bb-comment-only)) :kill)
-        ((match-nolabel bb-defines-global bb-defines-function-or-object)
-         (intern (match-string 1) globals))
-        ((and (not preserve-weak-symbols) (match-nolabel bb-defines-weak))
-         (intern (match-string 1) weaks))
-        ((match-nolabel bb-source-file-hint)
-         (puthash (string-to-number (match-string 1))
-                  (or (match-string 3) (match-string 2))
-                  source-file-map))
-        ((match-nolabel bb-endblock) (setq global-label nil) :preserve)
-        ((match-nolabel bb-set-directive)
-         (puthash (match-string 2) (match-string 1) synonyms))
         ((match-nolabel bb-source-stab)
          (pcase (string-to-number (match-string 1))
            ;; http://www.math.utah.edu/docs/info/stabs_11.html
            (68 (setq source-linum (match-string 2)))
-           ((or 100 132) (setq source-linum nil)))))
-      ;; second pass
-      (setq reachable-label nil)
-      (bb--sweeping
-        ((and (match-nolabel bb-data-defn bb-has-opcode) reachable-label)
-         :preserve)
-        ((match-label bb-label-start)
-         (cond
-          ((bb--reachable-p (match-string 1) globals label-graph synonyms
-                            (unless preserve-weak-symbols weaks))
-           (setq reachable-label (match-string 1))
-           (schedule-demangling-maybe (match-beginning 0) (match-end 0))
-           :preserve)
-          (t
-           (if preserve-labels :preserve :kill))))
-        ((match-nolabel bb-endblock) (setq reachable-label nil)))
-      (bb--demangle-overlays demangle-ovs))))
+           ((or 100 132) (setq source-linum nil))))
+        ((match-nolabel bb-endblock)
+         (commit)
+         (setq reachable-label nil))
+        (t (commit))))
+    (when demangle
+      (shell-command-on-region (point-min) (point-max) "c++filt"
+                               (current-buffer) 'no-mark))))
 
 (cl-defun bb--rainbowize (src-buffer)
   (let* ((background-hsl
@@ -560,34 +514,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
   (setq bb--rainbow-overlays nil))
 
 (defun bb--make-line-mappings ()
-  (let ((linum 1)
-        (start-match nil)
-        (in-match nil)
-        (ht bb--line-mappings))
-    (clrhash ht)
-    (save-excursion
-      (goto-char (point-min))
-      (while (not (eobp))
-        (let ((property (get-text-property (point) 'bb-src-line)))
-          (progn
-            (cl-tagbody
-             run-conditional
-             (cond
-              ((and in-match (eq in-match property))
-               ;; We are continuing an existing match
-               nil)
-              (in-match
-               ;; We are in a match that has just expired
-               (push (cons start-match (1- linum))
-                     (cl-getf (gethash in-match ht) :lines))
-               (setq in-match nil
-                     start-match nil)
-               (go run-conditional))
-              (property
-               (setq in-match property
-                     start-match linum))))))
-        (cl-incf linum)
-        (forward-line 1)))
+  (let ((ht bb--line-mappings))
     (maphash (lambda (_k asm-regions)
                (save-excursion
                  (plist-put
@@ -602,8 +529,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
                                  (progn
                                    (forward-line (- endl begl))
                                    (line-end-position)))))))
-             ht)
-    ht))
+             ht)))
 
 ;;;;; Handlers
 (cl-defun bb--handle-finish-compile (compilation-buffer str)
@@ -632,17 +558,12 @@ Argument STR compilation finish status."
           (erase-buffer)
           (mapc #'delete-overlay (overlays-in (point-min) (point-max)))
           (insert-file-contents declared-output)
-          (cond ((eq
-                  t (while-no-input
-                      (save-excursion (funcall (cadr compile-spec)))))
-                 (erase-buffer)
-                 (insert "Interrupted!"))
-                (t
-                 (when output-window
-                   (set-window-start output-window old-window-start)
-                   (set-window-point output-window old-point))
-                 (bb--make-line-mappings)
-                 (bb--rainbowize src-buffer))))
+          (save-excursion (funcall (cadr compile-spec)))
+          (when output-window
+            (set-window-start output-window old-window-start)
+            (set-window-point output-window old-point))
+          (bb--make-line-mappings)
+          (bb--rainbowize src-buffer))
         (when-let ((w (get-buffer-window compilation-buffer)))
           (quit-window nil w)))
        (t
