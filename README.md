@@ -24,7 +24,6 @@ corresponds to, and vice versa.
 - Faster (2x) and more responsive (TODO: show benchmarks)
 - Less buggy (TODO: show actual rmsbolt problems)
 - Has rainbows.
-- Has `beardbolt-preserve-library-functions` switch like godbolt.
 - Simpler code (half the LOC)
 
 ### Installation

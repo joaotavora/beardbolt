@@ -78,7 +78,7 @@ If you are not on x86, you most likely want to set this to nil."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
-(defcustom bb-preserve-library-functions t
+(defcustom bb-preserve-weak-symbols t
   "Whether to preserve library function."
   :type 'boolean
   :safe 'booleanp
@@ -421,7 +421,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
         demangle-ovs
         (preserve-comments (buffer-local-value 'bb-preserve-comments bb--source-buffer))
         (preserve-labels (buffer-local-value 'bb-preserve-labels bb--source-buffer))
-        (preserve-library-functions (buffer-local-value 'bb-preserve-library-functions bb--source-buffer)))
+        (preserve-weak-symbols (buffer-local-value 'bb-preserve-weak-symbols bb--source-buffer)))
     (cl-flet ((schedule-demangling-maybe (from to)
                 (when (and (eq (char-after from) ?_)
                            (not (bb--demangle-quick from to)))
@@ -459,7 +459,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
         ((and (not preserve-comments) (match bb-comment-only)) :kill)
         ((match bb-defines-global bb-defines-function-or-object)
          (intern (match-string 1) globals))
-        ((and (not preserve-library-functions) (match bb-defines-weak))
+        ((and (not preserve-weak-symbols) (match bb-defines-weak))
          (intern (match-string 1) weaks))
         ((match bb-source-file-hint)
          (puthash (string-to-number (match-string 1))
@@ -481,7 +481,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
         ((match bb-label-start)
          (cond
           ((bb--reachable-p (match-string 1) globals label-graph synonyms
-                            (unless preserve-library-functions weaks))
+                            (unless preserve-weak-symbols weaks))
            (setq reachable-label (match-string 1))
            (schedule-demangling-maybe (match-beginning 0) (match-end 0))
            :preserve)
