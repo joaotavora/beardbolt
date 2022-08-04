@@ -1,29 +1,26 @@
 #include <iostream>
+#include <array>
+#include <vector>
+#include <span>
 
-// C++ beardbolt starter file
-
-// Local Variables:
-// beardbolt-command: "g++ -O3"
-// rmsbolt-command: "g++ -O3"
-// beardbolt-kill-symbol-re: "\\(^_Z[^0-9]*[SP]\\|__gnu\\)"
-// beardbolt-disassemble: nil
-// End:
-
-int isRMS(int a) {
-  switch (a) {
-  case 'R':
-    return 1;
-  case 'M':
-    return 2;
-  case 'S':
-    return 3;
-  default:
-    return 0;
-  }
+template <typename F, typename T >
+void bubble(F from, T to) {
+  for (auto i = from; i < to - 1; i++)
+    for (auto j = to - 1; i < j; j--)
+      if (*j < *(j - 1))
+        std::swap(*j, *(j - 1));
 }
 
 int main() {
-  char a = 1 + 1;
-  if (isRMS(a))
-    std::cout << a << std::endl;
+  std::array a{5, 2, 1, 4, 2};
+  bubble(a.begin(), a.end());
+
+  std::cout << " Sorted array : ";
+  for (const auto& e : a) std::cout << e << "\n";
+  return 0;
 }
+
+// Local Variables:
+// beardbolt-command: "g++ -std=c++20 -O3"
+// beardbolt-kill-symbol-re: "\\(^_Z[^0-9]*[SP]\\|__\\)"
+// End:
