@@ -127,7 +127,7 @@ Passed directly to compiler or disassembler."
 
 (defvar bb-hide-compile t)
 
-(defvar bb-compile-delay 1.0
+(defvar bb-compile-delay 0.6
   "Time in seconds to delay before recompiling if there is a change.
 If nil, auto-recompilation is off.")
 
@@ -517,10 +517,9 @@ Argument STR compilation finish status."
          (output-buffer (bb--output-buffer src-buffer))
          (split-width-threshold (min split-width-threshold 100)))
     (with-current-buffer output-buffer
-      (asm-mode)
-      (display-line-numbers-mode)
-      (setq bb--source-buffer src-buffer)
       (bb--output-mode)
+
+      (setq bb--source-buffer src-buffer)
       (buffer-disable-undo)
       ;; Store src buffer value for later linking
       (cond
@@ -742,16 +741,12 @@ With prefix argument, choose from starter files in `bb-starter-files'."
     (remove-hook 'kill-buffer-hook #'bb--on-kill-source-buffer t)
     (remove-hook 'post-command-hook #'bb--source-buffer-pch t))))
 
-(define-minor-mode bb--output-mode
+(define-derived-mode bb--output-mode asm-mode "⚡output⚡"
   "Toggle `bearbolt--output-mode', internal mode for asm buffers."
-  :global nil :lighter " ⚡"
-  (cond
-   (bb--output-mode
-    (add-hook 'kill-buffer-hook #'bb--on-kill-output-buffer nil t)
-    (add-hook 'post-command-hook #'bb--output-buffer-pch nil t))
-   (t
-    (remove-hook 'kill-buffer-hook #'bb--on-kill-output-buffer t)
-    (remove-hook 'post-command-hook #'bb--output-buffer-pch t))))
+  (add-hook 'kill-buffer-hook #'bb--on-kill-output-buffer nil t)
+  (add-hook 'post-command-hook #'bb--output-buffer-pch nil t)
+  (setq truncate-lines t)
+  (display-line-numbers-mode))
 
 ;;;###autoload
 (defun beardbolt ()
