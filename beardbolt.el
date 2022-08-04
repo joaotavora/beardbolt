@@ -128,7 +128,8 @@ Passed directly to compiler or disassembler."
 (defvar bb-hide-compile t)
 
 (defvar bb-compile-delay 1.0
-  "Time in seconds to delay before recompiling if there is a change.")
+  "Time in seconds to delay before recompiling if there is a change.
+If nil, auto-recompilation is off.")
 
 (defvar bb--shell "bash"
   "Which shell to prefer if available.
@@ -700,8 +701,9 @@ With prefix argument, choose from starter files in `bb-starter-files'."
 (defvar bb--change-timer nil)
 
 (defun bb--after-change (&rest _)
-  (when (timerp bb--change-timer) (cancel-timer bb--change-timer))
-  (setq bb--change-timer (run-with-timer bb-compile-delay nil #'bb--on-change-timer)))
+  (when bb-compile-delay
+    (when (timerp bb--change-timer) (cancel-timer bb--change-timer))
+    (setq bb--change-timer (run-with-timer bb-compile-delay nil #'bb--on-change-timer))))
 
 (defun bb--on-change-timer ()
   (bb-compile (bb--get-lang)))
