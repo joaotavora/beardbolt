@@ -1,29 +1,31 @@
 # Beardbolt
 
+![beardbolt in action](./beardbolt.gif)
+
 An experimental fork of [RMSbolt](https://gitlab.com/jgkamat/rmsbolt),
 itself a supercharged implementation of [godbolt
 compiler-explorer](https://github.com/mattgodbolt/compiler-explorer)
 for Emacs.
 
-Beardbolt tries to make it easy to see what your compiler is doing.
-It does this by showing you the assembly output of a given source code
-file.  It also highlights which source code a given assembly block
-corresponds to, and vice versa.
+Beardbolt shows you assembly output for given source code file, making
+it easy to see what your compiler is doing.
+
+It also highlights which source code corresponds to a given assembly,
+and vice versa.
 
 ### Why RMSbolt over Beardbolt
 
 - Supports more languages/compilers. Beardbolt only C++/C clang/gcc.
 - Has good documentation and a proper API.
-- Supports more Emacs versions.  Beardbolt only 28+
-- Support compile-commands.json
+- Supports more Emacs versions.  Beardbolt probably only 28+
 
 ### Why Beardbolt over RMSbolt
 
 - Doesn't require file to be saved.
-- 2-5x faster on typical files.  See [here][#benchmarks])
+- 2-5x faster on typical files.  See [here](#benchmarks).
 - Less buggy (TODO: show actual RMSbolt problems)
 - Has rainbows.
-- Simpler code (less than half the LOC, but )
+- Simpler code (less than half the LOC, but also less funcional).
 
 ### Installation
 
@@ -101,15 +103,13 @@ Beardbolt timings for unordered-multimap-emplace.cpp
 ```
 
 This ran `beardbolt-compile` and `rmsbolt-compile` 5 times on small
-two [cppreference.com][https://cppreference.com] examples
+two [cppreference.com](https://cppreference.com) examples
 ([1][example1], [2][example2]) as well as a known "slow" file found in
-RMSbolt's bug tracker
-([here](https://gitlab.com/jgkamat/rmsbolt/-/issues/9)).
+[RMSbolt's bug tracker](https://gitlab.com/jgkamat/rmsbolt/-/issues/9).
 
-I patched `rmsbolt.el` to generate slightly less useless (for our use
-case) debug information with `-g1` instead of `g`.  This makes RMSbolt
-run faster than it normally would, but since Beardbolt also uses this
-optimization, it is important to make the benchmarks fair(er?).
+To make the benchmark fair(er?) I patched `rmsbolt.el` to generate
+slightly less debug with `-g1` instead of `-g`, and thus benefit from
+the same speedup that `beardbolt.el` uses.
 
 The results were obtained on my Thinkpad T480 running Emacs 29
 (without native compilation).
