@@ -212,14 +212,14 @@ Useful if you have multiple objdumpers and want to select between them")
                (:conc-name bb--lang-))
   (base-cmd nil :documentation "") (compile-specs nil :documentation ""))
 
-(defun bb-split-rm-single (cmd flag &optional test)
+(defun bb--split-rm-single (cmd flag &optional test)
   "Remove a single FLAG from CMD.  Test according to TEST."
   (mapconcat #'identity (cl-remove flag (split-string cmd)
                                    :test (or test #'string=))
              " "))
 
-(defun bb-split-rm-double (cmd flag)
-  "Remove a single FLAG and arg from CMD."
+(defun bb--split-rm-double (cmd flag)
+  "Remove a FLAG and subsequent arg from CMD."
   (cl-loop while split with split = (split-string cmd)
            for i from 0
            for probe = (car split)
@@ -247,6 +247,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
     (let* ((direct-asm-out (tmp "beardbolt" "s"))
            (disass-asm-out (tmp "beardbolt" "out"))
            (base-command (ensure-list (or bb-command
+                                          (bb--guess-from-ccj)
                                           (bb--lang-base-cmd (bb--get-lang)))))
            (debug `("-g1"))
            (stdin-process `("-x" ,(if (derived-mode-p 'c++-mode) "c++" "c") "-"))
@@ -704,6 +705,23 @@ With prefix argument, choose from starter files in `bb-starter-files'."
 
 (defun bb--on-change-timer ()
   (bb-compile (bb--get-lang)))
+
+(defun bb--guess-from-ccj ()
+  (if-let* ((ccj-basename "compile_commands.json")
+            (ccj-dir (locate-dominating-file default-directory ccj-basename))
+            (ccj-file (expand-file-name ccj-basename ccj-dir))
+            (ccj (with-temp-buffer
+                   (insert-file-contents ccj-file)
+                   (goto-char (point-min))
+                   (json-parse-buffer :object-type 'plist)))
+            (cmd (cl-loop for e across ccj
+                          for file = (plist-get e :file)
+                          when (equal file buffer-file-name)
+                          return (plist-get e :command)))
+            (cmd (bb--split-rm-double cmd "-o"))
+            (cmd (bb--split-rm-double cmd "-c"))
+            (cmd (bb--split-rm-single cmd "-flto" #'string-prefix-p)))
+      cmd))
 
 ;;;; Mode Definition:
 
