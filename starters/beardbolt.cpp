@@ -5,6 +5,7 @@
 // Local Variables:
 // beardbolt-command: "g++ -O3"
 // rmsbolt-command: "g++ -O3"
+// beardbolt-kill-symbol-re: "\\(^_Z[^0-9]*[SP]\\|__gnu\\)"
 // beardbolt-disassemble: nil
 // End:
 

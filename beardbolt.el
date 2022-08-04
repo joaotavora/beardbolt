@@ -49,6 +49,19 @@
   :safe 'booleanp
   :group 'beardbolt)
 
+(defcustom bb-kill-symbol-re nil
+  "Regular expression matching assembly symbols to ignore.
+Currently, this matches on **mangled** symbols.
+
+A somewhat useful value could be
+
+   \\(^_Z[^0-9]*[SP]\\|__gnu\\)
+
+in quotes, of course."
+  :type 'string
+  :safe (lambda (v) (or (booleanp v) (stringp v)))
+  :group 'beardbolt)
+
 (defcustom bb-command nil
   "The base command to run beardbolt from."
   :type 'string
@@ -58,13 +71,7 @@
 
 (defcustom bb-asm-format 'att
   "Which output assembly format to use.
-
-The supported values depend highly on the exporter, but typical
-values are: `intel', `att' or nil (for using tool defaults).
-Invalid values will be passed onto the disassembly tools, which
-may throw errors.
-
-If you are not on x86, you most likely want to set this to nil."
+Passed directly to compiler or disassembler."
   :type 'string
   :safe (lambda (v) (or (booleanp v) (symbolp v) (stringp v)))
   :group 'beardbolt)
@@ -78,18 +85,8 @@ If you are not on x86, you most likely want to set this to nil."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
-(defcustom bb-preserve-weak-symbols t
-  "Whether to preserve library function."
-  :type 'boolean
-  :safe 'booleanp
-  :group 'beardbolt)
 (defcustom bb-preserve-comments nil
   "Whether to filter comment-only lines."
-  :type 'boolean
-  :safe 'booleanp
-  :group 'beardbolt)
-(defcustom bb-ignore-binary-limit nil
-  "Whether to ignore the binary limit. Could hang emacs..."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
@@ -156,11 +153,6 @@ Useful if you have multiple objdumpers and want to select between them")
                               (opt "a") "l" (0+ space)
                               (group (any ".a-zA-Z_")
                                      (0+ (any "a-zA-Z0-9$_.")))))
-
-(defvar bb-defines-weak (rx bol (0+ space) ".weak"
-                            (0+ space)
-                            (group (any ".a-zA-Z_")
-                                   (0+ (any "a-zA-Z0-9$_.")))))
 (defvar bb-label-reference (rx (any ".a-zA-Z_")
                                (0+
                                 (any "a-zA-Z0-9$_."))))
@@ -304,15 +296,15 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
   (let* ((regexp bb--hidden-func-c))
     (if regexp (not (string-match-p regexp func)) t)))
 
+(defmacro bb--get (sym) `(buffer-local-value ',sym bb--source-buffer))
+
 (defmacro bb--sweeping (&rest forms)
   (declare (indent 0)
            (debug (&rest (form &rest form))))
   (let ((lbp (cl-gensym "lbp-")) (lep (cl-gensym "lep-"))
         (preserve-directives (cl-gensym "preserve-directives-"))
         (linum (cl-gensym "linum-")))
-    `(let ((,preserve-directives (buffer-local-value
-                                  'bb-preserve-directives
-                                  bb--source-buffer))
+    `(let ((,preserve-directives (bb--get bb-preserve-directives))
            (,linum 1))
        (goto-char (point-min))
        (while (not (eobp))
@@ -361,15 +353,20 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
        :preserve))))
 
 (defun bb--process-asm ()
-  (let ((used-labels (obarray-make))
-        (src-file-name "<stdin>")
-        (source-file-map (make-hash-table :test #'eq))
-        source-linum
-        global-label
-        reachable-label
-        (preserve-comments (buffer-local-value 'bb-preserve-comments bb--source-buffer))
-        (preserve-labels (buffer-local-value 'bb-preserve-labels bb--source-buffer))
-        (_preserve-weak-symbols (buffer-local-value 'bb-preserve-weak-symbols bb--source-buffer)))
+  (let* ((used-labels (obarray-make))
+         (maybe-mark-used (lambda (s)
+                            (unless (and (bb--get bb-kill-symbol-re)
+                                         (string-match
+                                          (bb--get bb-kill-symbol-re)
+                                          s))
+                              (intern s used-labels))))
+         (src-file-name "<stdin>")
+         (source-file-map (make-hash-table :test #'eq))
+         source-linum
+         global-label
+         reachable-label
+         (preserve-comments (bb--get bb-preserve-comments))
+         (preserve-labels (bb--get bb-preserve-labels)))
     (bb--sweeping ; first pass
       ((not (eq (char-after) ?\t))
        (cond ((match bb-label-start)
@@ -381,11 +378,11 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
        (cond ((match bb-has-opcode)
               (when global-label
                 (while (match bb-label-reference)
-                  (intern (match-string 0) used-labels)))
+                  (funcall maybe-mark-used (match-string 0))))
               :preserve)
              ((and (not preserve-comments) (match bb-comment-only)) :kill)
              ((match bb-defines-global bb-defines-function-or-object)
-              (intern (match-string 1) used-labels))
+              (funcall maybe-mark-used (match-string 1)))
              ((match bb-source-file-hint)
               (puthash (string-to-number (match-string 1))
                        (or (match-string 3) (match-string 2))
@@ -539,7 +536,7 @@ Argument STR compilation finish status."
             (set-window-start output-window old-window-start)
             (set-window-point output-window old-point))
           (setq bb--line-mappings (reverse bb--line-mappings))
-          (when (buffer-local-value 'bb-demangle bb--source-buffer)
+          (when (bb--get bb-demangle)
             (shell-command-on-region (point-min) (point-max) "c++filt"
                                      (current-buffer) 'no-mark))
           (bb--rainbowize src-buffer))
