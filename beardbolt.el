@@ -164,12 +164,6 @@ Useful if you have multiple objdumpers and want to select between them")
 (defvar bb-label-reference (rx (any ".a-zA-Z_")
                                (0+
                                 (any "a-zA-Z0-9$_."))))
-(defvar bb-set-directive (rx bol (0+ space) ".set" (1+ space)
-                             (group (any ".a-zA-Z_")
-                                    (0+ (any "a-zA-Z0-9$_.")))
-                             (0+ space) "," (0+ space)
-                             (group (any ".a-zA-Z_")
-                                    (0+ (any "a-zA-Z0-9$_.")))))
 (defvar bb-has-opcode (rx bol (1+ space)
                           (1+ (any "a-zA-Z"))))
 
@@ -326,14 +320,6 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
            (cl-macrolet ((match (&rest res)
                            `(cl-loop for re in ,(cons 'list res)
                                      thereis (re-search-forward re ,',lep t)))
-                         (match-label (re)
-                           `(and (not (eq (char-after) ?\t))
-                                 (re-search-forward ,re ,',lep t)))
-                         (match-nolabel (&rest res)
-                           `(and
-                             (eq (char-after) ?\t)
-                             (cl-loop for re in ,(cons 'list res)
-                                     thereis (re-search-forward re ,',lep t))))
                          (update-lep () `(setq ,',lep (line-end-position)))
                          (asm-linum () ',linum)
                          (preserve () `(progn
@@ -376,7 +362,6 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
 
 (defun bb--process-asm ()
   (let ((used-labels (obarray-make))
-        (synonyms (make-hash-table :test #'equal))
         (src-file-name "<stdin>")
         (source-file-map (make-hash-table :test #'eq))
         source-linum
@@ -385,56 +370,58 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
         (preserve-comments (buffer-local-value 'bb-preserve-comments bb--source-buffer))
         (preserve-labels (buffer-local-value 'bb-preserve-labels bb--source-buffer))
         (_preserve-weak-symbols (buffer-local-value 'bb-preserve-weak-symbols bb--source-buffer)))
-    (bb--sweeping
-      ((match-label bb-label-start)
-       (when (intern-soft (match-string 1) used-labels)
-         (setq global-label (match-string 1)))
-       :preserve)
-      ((match-nolabel bb-has-opcode)
-       (when global-label
-         (while (match bb-label-reference)
-           (intern (match-string 0) used-labels)))
-       :preserve)
-      ((and (not preserve-comments) (match-nolabel bb-comment-only)) :kill)
-      ((match-nolabel bb-defines-global bb-defines-function-or-object)
-       (intern (match-string 1) used-labels))
-      ((match-nolabel bb-source-file-hint)
-       (puthash (string-to-number (match-string 1))
-                (or (match-string 3) (match-string 2))
-                source-file-map))
-      ((match-nolabel bb-endblock) (setq global-label nil)
-       :preserve)
-      ((match-nolabel bb-set-directive)
-       (puthash (match-string 2) (match-string 1) synonyms))
-      (t :preserve))
-    ;; second pass
-    (bb--sweeping
-      ((and (match-nolabel bb-data-defn) reachable-label)
-       :preserve)
-      ((and (match-nolabel bb-has-opcode) reachable-label)
-       (when source-linum (bb--register-mapping source-linum (asm-linum)))
-       :preserve)
-      ((match-label bb-label-start)
-       (cond
-        ((intern-soft (match-string 1) used-labels)
-         (setq reachable-label (match-string 1))
-         :preserve)
-        (t
-         (if preserve-labels :preserve :kill))))
-      ((match-nolabel bb-source-tag)
-       (setq source-linum
-             (and (equal src-file-name
-                         (gethash
-                          (string-to-number (match-string 1))
-                          source-file-map))
-                  (string-to-number (match-string 2)))))
-      ((match-nolabel bb-source-stab)
-       (pcase (string-to-number (match-string 1))
-         ;; http://www.math.utah.edu/docs/info/stabs_11.html
-         (68 (setq source-linum (match-string 2)))
-         ((or 100 132) (setq source-linum nil))))
-      ((match-nolabel bb-endblock)
-       (setq reachable-label nil)))))
+    (bb--sweeping ; first pass
+      ((not (eq (char-after) ?\t))
+       (cond ((match bb-label-start)
+              (when (intern-soft (match-string 1) used-labels)
+                (setq global-label (match-string 1)))
+              :preserve)
+             (t :kill)))
+      (t
+       (cond ((match bb-has-opcode)
+              (when global-label
+                (while (match bb-label-reference)
+                  (intern (match-string 0) used-labels)))
+              :preserve)
+             ((and (not preserve-comments) (match bb-comment-only)) :kill)
+             ((match bb-defines-global bb-defines-function-or-object)
+              (intern (match-string 1) used-labels))
+             ((match bb-source-file-hint)
+              (puthash (string-to-number (match-string 1))
+                       (or (match-string 3) (match-string 2))
+                       source-file-map))
+             ((match bb-endblock) (setq global-label nil)
+              :preserve)
+             (t :preserve))))
+    (bb--sweeping ; second pass
+      ((not (eq (char-after) ?\t))
+       (when (match bb-label-start)
+         (cond
+          ((intern-soft (match-string 1) used-labels)
+           (setq reachable-label (match-string 1))
+           :preserve)
+          (t
+           (if preserve-labels :preserve :kill)))))
+      (t
+       (cond ((and (match bb-data-defn) reachable-label)
+              :preserve)
+             ((and (match bb-has-opcode) reachable-label)
+              (when source-linum (bb--register-mapping source-linum (asm-linum)))
+              :preserve)
+             ((match bb-source-tag)
+              (setq source-linum
+                    (and (equal src-file-name
+                                (gethash
+                                 (string-to-number (match-string 1))
+                                 source-file-map))
+                         (string-to-number (match-string 2)))))
+             ((match bb-source-stab)
+              (pcase (string-to-number (match-string 1))
+                ;; http://www.math.utah.edu/docs/info/stabs_11.html
+                (68 (setq source-linum (match-string 2)))
+                ((or 100 132) (setq source-linum nil))))
+             ((match bb-endblock)
+              (setq reachable-label nil)))))))
 
 (cl-defun bb--rainbowize (src-buffer)
   (bb--delete-rainbow-overlays)
