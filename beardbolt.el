@@ -346,6 +346,14 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
                 (if ,preserve-directives (preserve)
                   (delete-region ,lbp (1+ ,lep)))))))))))
 
+(defun bb--register-mapping (source-linum l)
+  (let ((current-chunk (car bb--line-mappings)))
+    (if (and (eq source-linum (cdr current-chunk))
+             (eq l (1+ (cdar current-chunk))))
+        (setf (cdar current-chunk) l)
+      (push (cons (cons l l) source-linum)
+            bb--line-mappings))))
+
 (cl-defun bb--process-disassembled-lines ()
   (let* ((src-file-name "<stdin>") (func nil) (source-linum nil))
     (bb--sweeping
@@ -361,11 +369,10 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
       ((and func (not (bb--user-func-p func)))
        :kill)
       ((match bb-disass-opcode)
-       (when nil
-         (add-text-properties (line-beginning-position) (line-end-position)
-                              `(bb-src-line ,source-linum)))
+       (when source-linum
+         (bb--register-mapping source-linum (asm-linum)))
        (replace-match (concat (match-string 1) "\t" (match-string 3)))
-       (forward-line 1)))))
+       :preserve))))
 
 (defun bb--process-asm ()
   (let ((used-labels (obarray-make))
@@ -377,8 +384,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
         reachable-label
         (preserve-comments (buffer-local-value 'bb-preserve-comments bb--source-buffer))
         (preserve-labels (buffer-local-value 'bb-preserve-labels bb--source-buffer))
-        (preserve-weak-symbols (buffer-local-value 'bb-preserve-weak-symbols bb--source-buffer))
-        (demangle (buffer-local-value 'bb-demangle bb--source-buffer)))
+        (_preserve-weak-symbols (buffer-local-value 'bb-preserve-weak-symbols bb--source-buffer)))
     (bb--sweeping
       ((match-label bb-label-start)
        (when (intern-soft (match-string 1) used-labels)
@@ -402,45 +408,33 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
        (puthash (match-string 2) (match-string 1) synonyms))
       (t :preserve))
     ;; second pass
-    (cl-flet ((add (l)
-                (let ((current-chunk (car bb--line-mappings)))
-                  (if (and (eq source-linum (cdr current-chunk))
-                           (eq l (1+ (cdar current-chunk))))
-                      (setf (cdar current-chunk) l)
-                    (push (cons (cons l l) source-linum)
-                          bb--line-mappings)))))
-      (setq bb--line-mappings nil)
-      (bb--sweeping
-        ((and (match-nolabel bb-data-defn) reachable-label)
+    (bb--sweeping
+      ((and (match-nolabel bb-data-defn) reachable-label)
+       :preserve)
+      ((and (match-nolabel bb-has-opcode) reachable-label)
+       (when source-linum (bb--register-mapping source-linum (asm-linum)))
+       :preserve)
+      ((match-label bb-label-start)
+       (cond
+        ((intern-soft (match-string 1) used-labels)
+         (setq reachable-label (match-string 1))
          :preserve)
-        ((and (match-nolabel bb-has-opcode) reachable-label)
-         (when source-linum (add (asm-linum)))
-         :preserve)
-        ((match-label bb-label-start)
-         (cond
-          ((intern-soft (match-string 1) used-labels)
-           (setq reachable-label (match-string 1))
-           :preserve)
-          (t
-           (if preserve-labels :preserve :kill))))
-        ((match-nolabel bb-source-tag)
-         (setq source-linum
-               (and (equal src-file-name
-                           (gethash
-                            (string-to-number (match-string 1))
-                            source-file-map))
-                    (string-to-number (match-string 2)))))
-        ((match-nolabel bb-source-stab)
-         (pcase (string-to-number (match-string 1))
-           ;; http://www.math.utah.edu/docs/info/stabs_11.html
-           (68 (setq source-linum (match-string 2)))
-           ((or 100 132) (setq source-linum nil))))
-        ((match-nolabel bb-endblock)
-         (setq reachable-label nil))))
-    (setq bb--line-mappings (reverse bb--line-mappings))
-    (when demangle
-      (shell-command-on-region (point-min) (point-max) "c++filt"
-                               (current-buffer) 'no-mark))))
+        (t
+         (if preserve-labels :preserve :kill))))
+      ((match-nolabel bb-source-tag)
+       (setq source-linum
+             (and (equal src-file-name
+                         (gethash
+                          (string-to-number (match-string 1))
+                          source-file-map))
+                  (string-to-number (match-string 2)))))
+      ((match-nolabel bb-source-stab)
+       (pcase (string-to-number (match-string 1))
+         ;; http://www.math.utah.edu/docs/info/stabs_11.html
+         (68 (setq source-linum (match-string 2)))
+         ((or 100 132) (setq source-linum nil))))
+      ((match-nolabel bb-endblock)
+       (setq reachable-label nil)))))
 
 (cl-defun bb--rainbowize (src-buffer)
   (bb--delete-rainbow-overlays)
@@ -552,10 +546,15 @@ Argument STR compilation finish status."
           (erase-buffer)
           (mapc #'delete-overlay (overlays-in (point-min) (point-max)))
           (insert-file-contents declared-output)
+          (setq bb--line-mappings nil)
           (save-excursion (funcall (cadr compile-spec)))
           (when output-window
             (set-window-start output-window old-window-start)
             (set-window-point output-window old-point))
+          (setq bb--line-mappings (reverse bb--line-mappings))
+          (when (buffer-local-value 'bb-demangle bb--source-buffer)
+            (shell-command-on-region (point-min) (point-max) "c++filt"
+                                     (current-buffer) 'no-mark))
           (bb--rainbowize src-buffer))
         (when-let ((w (get-buffer-window compilation-buffer)))
           (quit-window nil w)))
