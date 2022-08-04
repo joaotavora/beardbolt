@@ -134,12 +134,10 @@ Passed directly to compiler or disassembler."
   "Which shell to prefer if available.
 Used to work around inconsistencies in alternative shells.")
 
-(defvar bb--temp-dir nil
-  "Temporary directory to use for compilation and other reasons.")
-
-(defun bb--temp-dir ()
-  (or (and bb--temp-dir (file-exists-p bb--temp-dir) bb--temp-dir)
-      (setq bb--temp-dir (make-temp-file "beardbolt-bb-" t)))) 
+(defun bb--sandbox-dir ()
+  (let ((d (expand-file-name "beardbolt-sandbox" user-emacs-directory)))
+    (make-directory d 'parents)
+    d))
 
 (defvar bb-dir (file-name-directory load-file-name)
   "The directory which beardbolt is installed to.")
@@ -235,7 +233,7 @@ Useful if you have multiple objdumpers and want to select between them")
 Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
   (cl-labels ((tmp (f newext)
                 (expand-file-name
-                 (format "%s.%s" (file-name-base f) newext) (bb--temp-dir)))
+                 (format "%s.%s" (file-name-base f) newext) (bb--sandbox-dir)))
               (objdump (in)
                 (let ((out (tmp in "bb-objdumped")))
                   `(("&&" ,bb-objdump-binary "-d" ,in
@@ -620,18 +618,25 @@ Interactively, determine LANG from `major-mode'."
 ;;;;; Starter Definitions
 
 (defvar bb-starter-files
-  '(("c" . "beardbolt.c")
-    ("c++" . "beardbolt.cpp") ))
+  '(("c++" . "beardbolt.cpp")
+    ("c" . "beardbolt.c")))
 
 ;;;###autoload
 (defun bb-starter (lang-name)
-  "Setup new file based on the sample STARTER-FILE-NAME."
+  "Setup new sandbox file for experiments.
+With prefix argument, choose from starter files in `bb-starter-files'."
   (interactive
-   (list (completing-read "Language: " bb-starter-files nil t)))
+   (list (if current-prefix-arg
+             (completing-read "Language: " bb-starter-files nil t)
+           (caar bb-starter-files))))
   (let* ((starter-file-name (cdr (assoc lang-name bb-starter-files)))
-         (file-name
-          (expand-file-name starter-file-name (bb--temp-dir)))
-         (exists (file-exists-p file-name))
+         (base (file-name-base starter-file-name))
+         (ext (file-name-extension starter-file-name))
+         (sandbox-file
+          (expand-file-name (concat base "-"
+                                    (format-time-string "%FT%T%z")
+                                    "." ext)
+                            (bb--sandbox-dir)))
          (src-file-name
           (when bb-dir
             (expand-file-name starter-file-name
@@ -639,10 +644,10 @@ Interactively, determine LANG from `major-mode'."
          (src-file-exists (when src-file-name
                             (file-exists-p src-file-name))))
     (if (not src-file-exists)
-        (error "Could not find starter files! Are you sure the starter/ folder is available? If you want to overide, set `bb-dir' to your install path")
-      (unless exists
-        (copy-file src-file-name file-name))
-      (find-file file-name)
+        (error "Could not find starter files!")
+      (unless (file-exists-p sandbox-file)
+        (copy-file src-file-name sandbox-file))
+      (find-file sandbox-file)
       (bb-mode 1))))
 
 (defun bb--recenter-maybe (pos)
