@@ -38,18 +38,22 @@
 (require 'color)
 
 ;;; Code:
-;;;; Customize:
 (defgroup beardbolt nil
   "beardbolt customization options"
   :group 'applications)
 
-(defcustom bb-disassemble nil
+(defmacro bb--defoption (sym &rest whatever)
+  `(progn (defcustom ,sym ,@whatever)
+          (put ',sym 'bb--option t)))
+
+
+(bb--defoption bb-disassemble nil
   "Whether we should disassemble an output binary."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
 
-(defcustom bb-kill-symbol-re nil
+(bb--defoption bb-kill-symbol-re nil
   "Regular expression matching assembly symbols to ignore.
 Currently, this matches on **mangled** symbols.
 
@@ -62,35 +66,35 @@ in quotes, of course."
   :safe (lambda (v) (or (booleanp v) (stringp v)))
   :group 'beardbolt)
 
-(defcustom bb-command nil
+(bb--defoption bb-command nil
   "The base command to run beardbolt from."
   :type 'string
   ;; nil means use default command
   :safe (lambda (v) (or (booleanp v) (listp v) (stringp v)))
   :group 'beardbolt)
 
-(defcustom bb-asm-format 'att
+(bb--defoption bb-asm-format 'att
   "Which output assembly format to use.
 Passed directly to compiler or disassembler."
   :type 'string
   :safe (lambda (v) (or (booleanp v) (symbolp v) (stringp v)))
   :group 'beardbolt)
-(defcustom bb-preserve-directives nil
+(bb--defoption bb-preserve-directives nil
   "Whether to preserve assembly directives."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
-(defcustom bb-preserve-labels nil
+(bb--defoption bb-preserve-labels nil
   "Whether to preserve unused labels."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
-(defcustom bb-preserve-comments nil
+(bb--defoption bb-preserve-comments nil
   "Whether to filter comment-only lines."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
-(defcustom bb-demangle t
+(bb--defoption bb-demangle t
   "Whether to attempt to demangle the resulting assembly."
   :type 'boolean
   :safe 'booleanp
@@ -564,6 +568,7 @@ Argument STR compilation finish status."
 Interactively, determine LANG from `major-mode'."
   (interactive (list (bb--get-lang)))
   (bb--maybe-stop-running-compilation)
+  (mapatoms (lambda (s) (when (get s 'bb--option) (kill-local-variable s))))
   (cl-letf (((symbol-function 'hack-local-variables-confirm)
              (lambda (_all-vars unsafe-vars risky-vars &rest _)
                (when unsafe-vars
