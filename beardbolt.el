@@ -521,18 +521,12 @@ Argument STR compilation finish status."
        ((string-match "^finished" str)
         (display-buffer (current-buffer) `(() (inhibit-same-window . t)))
         ;; Replace buffer contents but save point and scroll
-        (let* ((output-window (get-buffer-window))
-               (inhibit-modification-hooks t)
-               (old-point (and output-window (window-point output-window)))
-               (old-window-start (and output-window (window-start output-window))))
+        (let* ((inhibit-modification-hooks t))
           (erase-buffer)
           (mapc #'delete-overlay (overlays-in (point-min) (point-max)))
           (insert-file-contents declared-output)
           (setq bb--line-mappings nil)
           (save-excursion (funcall (cadr compile-spec)))
-          (when output-window
-            (set-window-start output-window old-window-start)
-            (set-window-point output-window old-point))
           (setq bb--line-mappings (reverse bb--line-mappings))
           (when (bb--get bb-demangle)
             (shell-command-on-region (point-min) (point-max) "c++filt"
