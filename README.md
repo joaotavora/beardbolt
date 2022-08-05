@@ -26,7 +26,6 @@ and vice versa.
 - 2-5x faster on typical files.  See [here for benchmarks](#benchmarks).
 - 🌈Has pretty rainbows🌈
 - Has the useful "preserve library functions" feature of Godbolt.
-- Less buggy AFAICT (TODO: show actual RMSbolt problems)
 - Simpler code (less than half the LOC, but also less funcional in some regards if we're honest).
 
 ### Installation
