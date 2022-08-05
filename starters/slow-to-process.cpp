@@ -1091,9 +1091,9 @@ template class String<int>;
 // beardbolt-command: "g++ -std=c++17 -O3"
 // rmsbolt-command: "g++ -std=c++17 -O3"
 // beardbolt-disassemble: nil
-// beardbolt-preserve-weak-symbols: t
 // rmsbolt-filter-directives: t
 // beardbolt-asm-format: att
 // rmsbolt-asm-format: "att"
 // beardbolt-preserve-directives: nil
+// beardbolt-preserve-unused-labels: nil
 // End:
