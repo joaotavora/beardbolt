@@ -80,7 +80,9 @@ Passed directly to compiler or disassembler."
 (defvar-local bb--compile-spec nil)
 (defvar-local bb--declared-output nil)
 (defvar-local bb--dump-file nil "Temporary file")
-(defvar-local bb--line-mappings nil "Maps asm regions -> source lines")
+(defvar-local bb--line-mappings nil
+  "List where of asm-to-source mappings.
+Each element is ((ASM-BEG-LINE . ASM-END-LINE) . SRC-LINE).")
 (defvar-local bb--rainbow-overlays nil "Rainbow overlays.")
 
 (defun bb--asm-buffer (src-buffer)
@@ -175,11 +177,6 @@ Useful if you have multiple objdumpers and want to select between them")
                            (group (1+ digit)) ",0,"
                            (group (1+ digit)) "," (0+ any)))
 
-(cl-defstruct (bb-lang
-               (:constructor make-beardbolt-lang)
-               (:conc-name bb--lang-))
-  (base-cmd nil :documentation "") (compile-specs nil :documentation ""))
-
 (defun bb--split-rm-single (cmd flag &optional test)
   "Remove a single FLAG from CMD.  Test according to TEST."
   (mapconcat #'identity (cl-remove flag (split-string cmd)
@@ -197,8 +194,7 @@ Useful if you have multiple objdumpers and want to select between them")
            and concat probe and do (setq split (cdr split))))
 
 (cl-defun bb--c/c++-compile-specs ()
-  "Process a compile command for gcc/clang.
-Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
+  "Get compile specs for gcc/clang."
   (cl-labels ((tmp (f newext)
                 (expand-file-name
                  (format "%s.%s" (file-name-base f) newext) (bb--sandbox-dir)))
@@ -216,7 +212,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
            (disass-asm-out (tmp "beardbolt" "out"))
            (base-command (ensure-list (or bb-command
                                           (bb--guess-from-ccj)
-                                          (bb--lang-base-cmd (bb--get-lang)))))
+                                          (cl-getf (bb--get-lang) :base-cmd))))
            (debug `("-g1"))
            (stdin-process `("-x" ,(if (derived-mode-p 'c++-mode) "c++" "c") "-"))
            (direct-asm `("-S" ,(format "-masm=%s" bb-asm-format)
@@ -239,33 +235,35 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
                (cdr objdump-pair))))
          ,#'bb--process-disassembled-lines)))))
 
-(defvar bb--hidden-func-c
-  (rx bol (or (and "__" (0+ any))
-              (and "_" (or "init" "start" "fini"))
-              (and (opt "de") "register_tm_clones")
-              "call_gmon_start"
-              "frame_dummy"
-              (and ".plt" (0+ any)))
-      eol))
-
 (defvar bb-languages
-  `((c-mode
-     . ,(make-beardbolt-lang :compile-specs #'bb--c/c++-compile-specs
-                             :base-cmd "gcc"))
-    (c++-mode
-     . ,(make-beardbolt-lang :compile-specs #'bb--c/c++-compile-specs
-                             :base-cmd "g++"))))
+  `((c-mode .   (:setup ,#'bb--c/c++-compile-specs :base-cmd "gcc"))
+    (c++-mode . (:setup ,#'bb--c/c++-compile-specs :base-cmd "g++")))
+  "Alist of (MAJOR-MODE . LANG-PLIST).
+LANG-PLIST has the following keywork-value pairs:
 
-(defmacro bb-with-display-buffer-no-window (&rest body)
+* `:setup', a nullary function returning a list (SPEC ...) where
+  SPEC looks like (WHAT CMD-FN PROCESS).
+
+  WHAT is a symbol `:compile' or `:compile-assemble-disassemble'.
+
+  CMD-FN is a function taking DUMP-FILE, name of the temp file
+  with the current buffer's content and returning a cons
+  cell (CMD . DECLARED-OUTPUT) where CMD is a string to pass to
+  `compilation-start' and DECLARED-OUTPUT is the name of the file
+  containing the output to insert into the asm buffer.
+
+  PROCESS is a nullary function to run in the asm buffer.  It
+  should clean up the buffer and setup a buffer-local value of
+  `beardbolt--line-mappings' (which see).
+
+* `:base-cmd', name of the compiler to run if user hasn't
+  specified one in `beardbolt-command'.")
+
+(defmacro bb--with-display-buffer-no-window (&rest body)
   "Run BODY without displaying any window."
   ;; See http://debbugs.gnu.org/13594
   `(let ((display-buffer-overriding-action (list #'display-buffer-no-window)))
      ,@body))
-
-(defun bb--user-func-p (func)
-  "Tell if FUNC is user's."
-  (let* ((regexp bb--hidden-func-c))
-    (if regexp (not (string-match-p regexp func)) t)))
 
 (defmacro bb--get (sym) `(buffer-local-value ',sym bb--source-buffer))
 
@@ -305,23 +303,32 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
 
 (cl-defun bb--process-disassembled-lines ()
   (let* ((src-file-name "<stdin>") (func nil) (source-linum nil))
-    (bb--sweeping
-      ((match bb-disass-line)
-       (setq source-linum (and (equal src-file-name
-                                      (file-name-base (match-string 1)))
-                               (string-to-number (match-string 2))))
-       :kill)
-      ((match bb-disass-label)
-       (setq func (match-string 2))
-       (when (bb--user-func-p func) (replace-match (concat func ":")))
-       :preserve)
-      ((and func (not (bb--user-func-p func)))
-       :kill)
-      ((match bb-disass-opcode)
-       (when source-linum
-         (bb--register-mapping source-linum (asm-linum)))
-       (replace-match (concat (match-string 1) "\t" (match-string 3)))
-       :preserve))))
+    (cl-flet ((bb--user-func-p (func)
+                (let* ((regexp (rx bol (or (and "__" (0+ any))
+                                           (and "_" (or "init" "start" "fini"))
+                                           (and (opt "de") "register_tm_clones")
+                                           "call_gmon_start"
+                                           "frame_dummy"
+                                           (and ".plt" (0+ any)))
+                                   eol)))
+                  (if regexp (not (string-match-p regexp func)) t))))
+      (bb--sweeping
+        ((match bb-disass-line)
+         (setq source-linum (and (equal src-file-name
+                                        (file-name-base (match-string 1)))
+                                 (string-to-number (match-string 2))))
+         :kill)
+        ((match bb-disass-label)
+         (setq func (match-string 2))
+         (when (bb--user-func-p func) (replace-match (concat func ":")))
+         :preserve)
+        ((and func (not (bb--user-func-p func)))
+         :kill)
+        ((match bb-disass-opcode)
+         (when source-linum
+           (bb--register-mapping source-linum (asm-linum)))
+         (replace-match (concat (match-string 1) "\t" (match-string 3)))
+         :preserve)))))
 
 (defun bb--process-asm ()
   (let* ((used-labels (obarray-make))
@@ -511,11 +518,11 @@ Argument STR compilation finish status."
             (display-buffer compilation-buffer `((display-buffer-use-least-recent-window))))))))))
 
 ;;;;; Parsing Options
-(defvar-local bb--language-descriptor nil)
+(defvar-local bb--language-plist nil)
 (defun bb--get-lang ()
   "Helper function to get lang def for LANGUAGE."
-  (or bb--language-descriptor
-      (cdr (assoc major-mode bb-languages))))
+  (or bb--language-plist (setq bb--language-plist
+                               (cdr (assoc major-mode bb-languages)))))
 
 (defun bb--compilation-buffer (&rest _)
   (get-buffer-create "*bb-compilation*"))
@@ -537,7 +544,7 @@ Interactively, determine LANG from `major-mode'."
   (let* ((dump-file (make-temp-file "beardbolt-dump-" nil
                                     (concat "." (file-name-extension buffer-file-name))))
          (src-buffer (current-buffer))
-         (specs (funcall (bb--lang-compile-specs lang)))
+         (specs (funcall (plist-get lang :setup)))
          (spec (alist-get
                 (if bb-disassemble :compile-assemble-disassemble :compile)
                 specs))
@@ -550,7 +557,7 @@ Interactively, determine LANG from `major-mode'."
                                    shell-file-name))
               (compilation-auto-jump-to-first-error t))
           ;; TODO should this be configurable?
-          (bb-with-display-buffer-no-window
+          (bb--with-display-buffer-no-window
            (compilation-start cmd nil #'bb--compilation-buffer)))
       ;; Only jump to errors, skip over warnings
       (setq-local compilation-skip-threshold 2)
@@ -674,7 +681,6 @@ With prefix argument, choose from starter files in `bb-starter-files'."
   :global nil :lighter " ⚡" :keymap bb-mode-map
   (cond
    (bb-mode
-    (setq-local bb--language-descriptor (bb--get-lang))
     (add-hook 'after-change-functions #'bb--after-change nil t)
     (add-hook 'post-command-hook #'bb--synch-relation-overlays nil t))
    (t
