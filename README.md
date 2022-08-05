@@ -2,30 +2,32 @@
 
 ![beardbolt in action](./beardbolt.gif)
 
-An experimental fork of [RMSbolt](https://gitlab.com/jgkamat/rmsbolt),
-itself a supercharged implementation of [godbolt
+An experimental fork-rewrite of
+[RMSbolt](https://gitlab.com/jgkamat/rmsbolt), itself a supercharged
+implementation of [godbolt, the
 compiler-explorer](https://github.com/mattgodbolt/compiler-explorer)
-for Emacs.
+but for Emacs, instead of a clunky browser.
 
-Beardbolt shows you assembly output for given source code file, making
-it easy to see what your compiler is doing.
+Beardbolt shows assembly output for given source code file, making it
+easy to see what the compiler is doing.
 
 It also highlights which source code corresponds to a given assembly,
 and vice versa.
 
 ### Why RMSbolt over Beardbolt
 
-- Supports more languages/compilers. Beardbolt only C++/C clang/gcc.
+- Supports more languages/compilers. Beardbolt only C++/C clang/gcc for now.
 - Has good documentation and a proper API.
 - Supports more Emacs versions.  Beardbolt probably only 28+
 
 ### Why Beardbolt over RMSbolt
 
 - Doesn't require file to be saved.
-- 2-5x faster on typical files.  See [here](#benchmarks).
-- Less buggy (TODO: show actual RMSbolt problems)
-- Has rainbows.
-- Simpler code (less than half the LOC, but also less funcional).
+- 2-5x faster on typical files.  See [here for benchmarks](#benchmarks).
+- 🌈Has pretty rainbows🌈
+- Has the useful "preserve library functions" feature of Godbolt.
+- Less buggy AFAICT (TODO: show actual RMSbolt problems)
+- Simpler code (less than half the LOC, but also less funcional in some regards if we're honest).
 
 ### Installation
 

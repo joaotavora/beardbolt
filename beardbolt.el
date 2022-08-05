@@ -53,19 +53,6 @@
   :safe 'booleanp
   :group 'beardbolt)
 
-(bb--defoption bb-kill-symbol-re nil
-  "Regular expression matching assembly symbols to ignore.
-Currently, this matches on **mangled** symbols.
-
-A somewhat useful value could be
-
-   \\(^_Z[^0-9]*[SP]\\|__gnu\\)
-
-in quotes, of course."
-  :type 'string
-  :safe (lambda (v) (or (booleanp v) (stringp v)))
-  :group 'beardbolt)
-
 (bb--defoption bb-command nil
   "The base command to run beardbolt from."
   :type 'string
@@ -80,22 +67,27 @@ Passed directly to compiler or disassembler."
   :safe (lambda (v) (or (booleanp v) (symbolp v) (stringp v)))
   :group 'beardbolt)
 (bb--defoption bb-preserve-directives nil
-  "Whether to preserve assembly directives."
+  "Non-nil to keep assembly directives."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
-(bb--defoption bb-preserve-labels nil
-  "Whether to preserve unused labels."
+(bb--defoption bb-preserve-unused-labels nil
+  "Non-nil to keep unused labels."
+  :type 'boolean
+  :safe 'booleanp
+  :group 'beardbolt)
+(bb--defoption bb-preserve-library-functions nil
+  "Non-nil to keep functions with no code related to current file."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
 (bb--defoption bb-preserve-comments nil
-  "Whether to filter comment-only lines."
+  "Non-nil to filter comment-only lines."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
 (bb--defoption bb-demangle t
-  "Whether to attempt to demangle the resulting assembly."
+  "Non-nil to attempt to demangle the resulting assembly."
   :type 'boolean
   :safe 'booleanp
   :group 'beardbolt)
@@ -156,7 +148,7 @@ Useful if you have multiple objdumpers and want to select between them")
                               (opt "a") "l" (0+ space)
                               (group (any ".a-zA-Z_")
                                      (0+ (any "a-zA-Z0-9$_.")))))
-(defvar bb-label-reference (rx (any ".a-zA-Z_")
+(defvar bb-label-reference (rx "." (any "a-zA-Z_")
                                (0+
                                 (any "a-zA-Z0-9$_."))))
 (defvar bb-has-opcode (rx bol (1+ space)
@@ -358,42 +350,48 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
 
 (defun bb--process-asm ()
   (let* ((used-labels (obarray-make))
-         (maybe-mark-used (lambda (s)
-                            (unless (and (bb--get bb-kill-symbol-re)
-                                         (string-match
-                                          (bb--get bb-kill-symbol-re)
-                                          s))
-                              (intern s used-labels))))
+         (routines (make-hash-table :test #'equal))
          (main-file-name "<stdin>")
          main-file-tag
+         main-file-routines
          source-linum
-         global-label
+         current-routine
          reachable-label
          (preserve-comments (bb--get bb-preserve-comments))
-         (preserve-labels (bb--get bb-preserve-labels)))
+         (preserve-unused-labels (bb--get bb-preserve-unused-labels))
+         (preserve-library-functions (bb--get bb-preserve-library-functions)))
     (bb--sweeping ; first pass
       ((not (eq (char-after) ?\t))
        (cond ((match bb-label-start)
-              (when (intern-soft (match-string 1) used-labels)
-                (setq global-label (match-string 1)))
+              (unless (eq :notfound (gethash (match-string 1) routines :notfound))
+                (setq current-routine (match-string 1)))
               :preserve)
              (t :kill)))
       (t
-       (cond ((match bb-has-opcode)
-              (when global-label
-                (while (match bb-label-reference)
-                  (funcall maybe-mark-used (match-string 0))))
+       (cond ((and current-routine (match bb-has-opcode))
+              (while (match bb-label-reference)
+                (push (match-string 0) (gethash current-routine routines)))
               :preserve)
-             ((and (not preserve-comments) (match bb-comment-only)) :kill)
+             ((and (not preserve-comments) (match bb-comment-only))
+              :kill)
              ((match bb-defines-global bb-defines-function-or-object)
-              (funcall maybe-mark-used (match-string 1)))
+              (puthash (match-string 1) nil routines))
              ((and (match bb-source-file-hint)
                    (equal (or (match-string 3) (match-string 2))
                           main-file-name))
               (setq main-file-tag (match-string 1)))
-             ((match bb-endblock) (setq global-label nil)
+             ((match bb-source-tag)
+              (when (and current-routine
+                         (equal (match-string 1) main-file-tag))
+                (push current-routine main-file-routines))
               :preserve)
+             ((match bb-endblock) (setq current-routine nil) :preserve)
              (t :preserve))))
+    (dolist (mfr (if preserve-library-functions
+                     (hash-table-keys routines)
+                   main-file-routines))
+      (intern mfr used-labels)
+      (dolist (callee (gethash mfr routines)) (intern callee used-labels)))
     (bb--sweeping ; second pass
       ((not (eq (char-after) ?\t))
        (when (match bb-label-start)
@@ -402,7 +400,7 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
            (setq reachable-label (match-string 1))
            :preserve)
           (t
-           (if preserve-labels :preserve :kill)))))
+           (if preserve-unused-labels :preserve :kill)))))
       (t
        (cond ((and (match bb-data-defn) reachable-label)
               :preserve)
