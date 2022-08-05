@@ -1,10 +1,9 @@
 #include <iostream>
 #include <array>
 #include <vector>
-#include <span>
 
-template <typename F, typename T >
-void bubble(F from, T to) {
+template <typename It>
+void bubble(It from, It to) {
   for (auto i = from; i < to - 1; i++)
     for (auto j = to - 1; i < j; j--)
       if (*j < *(j - 1))
@@ -12,15 +11,19 @@ void bubble(F from, T to) {
 }
 
 int main() {
-  std::array a{5, 2, 1, 4, 2};
-  bubble(a.begin(), a.end());
+  std::vector v{5, 2, 1, 4, 2};
+  bubble(v.begin(), v.end());
 
-  std::cout << " Sorted array : ";
-  for (const auto& e : a) std::cout << e << "\n";
+  std::cout << "Sorted array : ";
+  for (const auto& e : v) std::cout << e << "\n";
   return 0;
 }
 
 // Local Variables:
-// beardbolt-command: "g++ -std=c++20 -O3"
-// beardbolt-kill-symbol-re: "\\(^_Z[^0-9]*[SP]\\|__\\)"
+// beardbolt-command: "g++ -std=c++20 -O0"
+// beardbolt-demangle: t
+// beardbolt-disassemble: nil
+// beardbolt-preserve-library-functions: nil
+// beardbolt-preserve-unused-labels: nil
+// beardbolt-preserve-directives: nil
 // End:
