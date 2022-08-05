@@ -100,7 +100,7 @@ Passed directly to compiler or disassembler."
   :group 'beardbolt)
 
 ;;;; Basic model
-(defvar-local bb--output-buffer nil)
+(defvar-local bb--asm-buffer nil)
 (defvar-local bb--source-buffer nil)
 (defvar-local bb--compile-spec nil)
 (defvar-local bb--declared-output nil)
@@ -108,13 +108,15 @@ Passed directly to compiler or disassembler."
 (defvar-local bb--line-mappings nil "Maps asm regions -> source lines")
 (defvar-local bb--rainbow-overlays nil "Rainbow overlays.")
 
-(defun bb--output-buffer (src-buffer)
+(defun bb--asm-buffer (src-buffer)
   "Get/create output buffer for current source file."
   (with-current-buffer src-buffer
-    (or (and (buffer-live-p bb--output-buffer) bb--output-buffer)
-        (setq bb--output-buffer
+    (or (and (buffer-live-p bb--asm-buffer)
+             (equal (buffer-name bb--asm-buffer) "*bb-asm*")
+             bb--asm-buffer)
+        (setq bb--asm-buffer
               (with-current-buffer
-                  (generate-new-buffer (format "*bb-output for %s*" src-buffer))
+                  (get-buffer-create "*bb-asm*")
                 (current-buffer))))))
 
 (defvar bb-hide-compile t)
@@ -509,10 +511,10 @@ Argument STR compilation finish status."
   (let* ((src-buffer bb--source-buffer)
          (compile-spec bb--compile-spec)
          (declared-output bb--declared-output)
-         (output-buffer (bb--output-buffer src-buffer))
+         (output-buffer (bb--asm-buffer src-buffer))
          (split-width-threshold (min split-width-threshold 100)))
     (with-current-buffer output-buffer
-      (bb--output-mode)
+      (bb--asm-mode)
       (setq bb--source-buffer src-buffer)
       (let* ((inhibit-modification-hooks t)
              (inhibit-read-only t))
@@ -672,13 +674,13 @@ With prefix argument, choose from starter files in `bb-starter-files'."
   (bb--synch-relation-overlays))
 
 (defun bb--on-kill-source-buffer ()
-  (bb--when-live-buffer bb--output-buffer
-    (kill-buffer bb--output-buffer)))
+  (bb--when-live-buffer bb--asm-buffer
+    (kill-buffer bb--asm-buffer)))
 
 (defun bb--on-kill-output-buffer ()
   (bb--delete-rainbow-overlays))
 
-(defun bb--output-buffer-pch ()
+(defun bb--asm-buffer-pch ()
   (bb--synch-relation-overlays))
 
 (defvar bb--change-timer nil)
@@ -725,10 +727,10 @@ With prefix argument, choose from starter files in `bb-starter-files'."
     (remove-hook 'kill-buffer-hook #'bb--on-kill-source-buffer t)
     (remove-hook 'post-command-hook #'bb--source-buffer-pch t))))
 
-(define-derived-mode bb--output-mode asm-mode "⚡output⚡"
+(define-derived-mode bb--asm-mode asm-mode "⚡asm ⚡"
   "Toggle `bearbolt--output-mode', internal mode for asm buffers."
   (add-hook 'kill-buffer-hook #'bb--on-kill-output-buffer nil t)
-  (add-hook 'post-command-hook #'bb--output-buffer-pch nil t)
+  (add-hook 'post-command-hook #'bb--asm-buffer-pch nil t)
   (setq truncate-lines t)
   (read-only-mode t)
   (buffer-disable-undo)
