@@ -513,17 +513,13 @@ Argument STR compilation finish status."
          (split-width-threshold (min split-width-threshold 100)))
     (with-current-buffer output-buffer
       (bb--output-mode)
-
       (setq bb--source-buffer src-buffer)
-      (buffer-disable-undo)
-      ;; Store src buffer value for later linking
-      (cond
-       ((string-match "^finished" str)
-        (display-buffer (current-buffer) `(() (inhibit-same-window . t)))
-        ;; Replace buffer contents but save point and scroll
-        (let* ((inhibit-modification-hooks t)
-               (inhibit-read-only t))
-          (erase-buffer)
+      (let* ((inhibit-modification-hooks t)
+             (inhibit-read-only t))
+        (erase-buffer)
+        (cond
+         ((string-match "^finished" str)
+          (display-buffer (current-buffer) `((display-buffer-use-least-recent-window)))
           (mapc #'delete-overlay (overlays-in (point-min) (point-max)))
           (insert-file-contents declared-output)
           (setq bb--line-mappings nil)
@@ -533,13 +529,11 @@ Argument STR compilation finish status."
             (shell-command-on-region (point-min) (point-max) "c++filt"
                                      (current-buffer) 'no-mark))
           (bb--rainbowize src-buffer))
-        (when-let ((w (get-buffer-window compilation-buffer)))
-          (quit-window nil w)))
-       (t
-        (when-let ((w (get-buffer-window)))
-          (quit-window t w))
-        (unless (string-match "^interrupt" str)
-          (display-buffer compilation-buffer '(nil (inhibit-same-window . t)))))))))
+         (t
+          (insert "<Compilation failed>")
+          (unless (or (string-match "^interrupt" str)
+                      (get-buffer-window compilation-buffer))
+            (display-buffer compilation-buffer `((display-buffer-use-least-recent-window))))))))))
 
 ;;;;; Parsing Options
 (defvar-local bb--language-descriptor nil)
@@ -737,6 +731,7 @@ With prefix argument, choose from starter files in `bb-starter-files'."
   (add-hook 'post-command-hook #'bb--output-buffer-pch nil t)
   (setq truncate-lines t)
   (read-only-mode t)
+  (buffer-disable-undo)
   (local-set-key (kbd "q") 'quit-window))
 
 ;;;###autoload
