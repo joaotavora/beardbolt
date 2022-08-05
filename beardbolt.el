@@ -521,7 +521,8 @@ Argument STR compilation finish status."
        ((string-match "^finished" str)
         (display-buffer (current-buffer) `(() (inhibit-same-window . t)))
         ;; Replace buffer contents but save point and scroll
-        (let* ((inhibit-modification-hooks t))
+        (let* ((inhibit-modification-hooks t)
+               (inhibit-read-only t))
           (erase-buffer)
           (mapc #'delete-overlay (overlays-in (point-min) (point-max)))
           (insert-file-contents declared-output)
@@ -735,7 +736,8 @@ With prefix argument, choose from starter files in `bb-starter-files'."
   (add-hook 'kill-buffer-hook #'bb--on-kill-output-buffer nil t)
   (add-hook 'post-command-hook #'bb--output-buffer-pch nil t)
   (setq truncate-lines t)
-  (display-line-numbers-mode))
+  (read-only-mode t)
+  (local-set-key (kbd "q") 'quit-window))
 
 ;;;###autoload
 (defun beardbolt ()
