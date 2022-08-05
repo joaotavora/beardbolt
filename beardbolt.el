@@ -643,28 +643,13 @@ With prefix argument, choose from starter files in `bb-starter-files'."
              (overlay-put ov 'face (overlay-get ov 'beardbolt-rainbow-face)))
            (setq bb--currently-synched-overlays nil)))))
 
-(defun bb--source-buffer-pch ()
-  (bb--synch-relation-overlays))
-
-(defun bb--on-kill-source-buffer ()
-  (bb--when-live-buffer bb--asm-buffer
-    (kill-buffer bb--asm-buffer)))
-
-(defun bb--on-kill-asm-buffer ()
-  (bb--delete-rainbow-overlays))
-
-(defun bb--asm-buffer-pch ()
-  (bb--synch-relation-overlays))
-
 (defvar bb--change-timer nil)
 
 (defun bb--after-change (&rest _)
   (when bb-compile-delay
     (when (timerp bb--change-timer) (cancel-timer bb--change-timer))
-    (setq bb--change-timer (run-with-timer bb-compile-delay nil #'bb--on-change-timer))))
-
-(defun bb--on-change-timer ()
-  (bb-compile (bb--get-lang)))
+    (setq bb--change-timer
+          (run-with-timer bb-compile-delay nil #'bb-compile (bb--get-lang)))))
 
 (defun bb--guess-from-ccj ()
   (if-let* ((ccj-basename "compile_commands.json")
@@ -691,17 +676,15 @@ With prefix argument, choose from starter files in `bb-starter-files'."
    (bb-mode
     (setq-local bb--language-descriptor (bb--get-lang))
     (add-hook 'after-change-functions #'bb--after-change nil t)
-    (add-hook 'kill-buffer-hook #'bb--on-kill-source-buffer nil t)
-    (add-hook 'post-command-hook #'bb--source-buffer-pch nil t))
+    (add-hook 'post-command-hook #'bb--synch-relation-overlays nil t))
    (t
     (remove-hook 'after-change-functions #'bb--after-change t)
-    (remove-hook 'kill-buffer-hook #'bb--on-kill-source-buffer t)
-    (remove-hook 'post-command-hook #'bb--source-buffer-pch t))))
+    (remove-hook 'post-command-hook #'bb--synch-relation-overlays t))))
 
 (define-derived-mode bb--asm-mode asm-mode "⚡asm ⚡"
   "Toggle `bearbolt--output-mode', internal mode for asm buffers."
-  (add-hook 'kill-buffer-hook #'bb--on-kill-asm-buffer nil t)
-  (add-hook 'post-command-hook #'bb--asm-buffer-pch nil t)
+  (add-hook 'kill-buffer-hook #'bb--delete-rainbow-overlays nil t)
+  (add-hook 'post-command-hook #'bb--synch-relation-overlays nil t)
   (setq truncate-lines t)
   (read-only-mode t)
   (buffer-disable-undo)
