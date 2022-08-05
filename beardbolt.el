@@ -364,8 +364,8 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
                                           (bb--get bb-kill-symbol-re)
                                           s))
                               (intern s used-labels))))
-         (src-file-name "<stdin>")
-         (source-file-map (make-hash-table :test #'eq))
+         (main-file-name "<stdin>")
+         main-file-tag
          source-linum
          global-label
          reachable-label
@@ -387,10 +387,10 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
              ((and (not preserve-comments) (match bb-comment-only)) :kill)
              ((match bb-defines-global bb-defines-function-or-object)
               (funcall maybe-mark-used (match-string 1)))
-             ((match bb-source-file-hint)
-              (puthash (string-to-number (match-string 1))
-                       (or (match-string 3) (match-string 2))
-                       source-file-map))
+             ((and (match bb-source-file-hint)
+                   (equal (or (match-string 3) (match-string 2))
+                          main-file-name))
+              (setq main-file-tag (match-string 1)))
              ((match bb-endblock) (setq global-label nil)
               :preserve)
              (t :preserve))))
@@ -411,15 +411,12 @@ Returns a list (SPEC ...) where SPEC looks like (WHAT FN CMD)."
               :preserve)
              ((match bb-source-tag)
               (setq source-linum
-                    (and (equal src-file-name
-                                (gethash
-                                 (string-to-number (match-string 1))
-                                 source-file-map))
+                    (and (equal (match-string 1) main-file-tag)
                          (string-to-number (match-string 2)))))
              ((match bb-source-stab)
               (pcase (string-to-number (match-string 1))
                 ;; http://www.math.utah.edu/docs/info/stabs_11.html
-                (68 (setq source-linum (match-string 2)))
+                (68 (setq source-linum (string-to-number (match-string 2))))
                 ((or 100 132) (setq source-linum nil))))
              ((match bb-endblock)
               (setq reachable-label nil)))))))
