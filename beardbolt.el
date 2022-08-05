@@ -43,63 +43,38 @@
   :group 'applications)
 
 (defmacro bb--defoption (sym &rest whatever)
-  `(progn (defcustom ,sym ,@whatever)
-          (put ',sym 'bb--option t)))
-
-
-(bb--defoption bb-disassemble nil
-  "Whether we should disassemble an output binary."
-  :type 'boolean
-  :safe 'booleanp
-  :group 'beardbolt)
+  `(progn (defcustom ,sym ,@whatever) (put ',sym 'bb--option t)))
 
 (bb--defoption bb-command nil
   "The base command to run beardbolt from."
-  :type 'string
-  ;; nil means use default command
-  :safe (lambda (v) (or (booleanp v) (listp v) (stringp v)))
-  :group 'beardbolt)
-
+  :type 'string :safe (lambda (v) (or (listp v) (stringp v))))
+(bb--defoption bb-disassemble nil
+  "Non-nil to assemble then disassemble an output binary."
+  :type 'boolean :safe 'booleanp)
 (bb--defoption bb-asm-format 'att
   "Which output assembly format to use.
 Passed directly to compiler or disassembler."
-  :type 'string
-  :safe (lambda (v) (or (booleanp v) (symbolp v) (stringp v)))
-  :group 'beardbolt)
+  :type 'string :safe (lambda (v) (or (null v) (symbolp v) (stringp v))))
 (bb--defoption bb-preserve-directives nil
   "Non-nil to keep assembly directives."
-  :type 'boolean
-  :safe 'booleanp
-  :group 'beardbolt)
+  :type 'boolean :safe 'booleanp)
 (bb--defoption bb-preserve-unused-labels nil
   "Non-nil to keep unused labels."
-  :type 'boolean
-  :safe 'booleanp
-  :group 'beardbolt)
+  :type 'boolean :safe 'booleanp)
 (bb--defoption bb-preserve-library-functions nil
   "Non-nil to keep functions with no code related to current file."
-  :type 'boolean
-  :safe 'booleanp
-  :group 'beardbolt)
+  :type 'boolean :safe 'booleanp)
 (bb--defoption bb-preserve-comments nil
   "Non-nil to filter comment-only lines."
-  :type 'boolean
-  :safe 'booleanp
-  :group 'beardbolt)
+  :type 'boolean :safe 'booleanp)
 (bb--defoption bb-demangle t
   "Non-nil to attempt to demangle the resulting assembly."
-  :type 'boolean
-  :safe 'booleanp
-  :group 'beardbolt)
-
-;;;; Faces
+  :type 'boolean :safe 'booleanp)
 
 (defface bb-current-line-face
   '((t (:weight bold :inherit highlight)))
-  "Face to fontify the current line for showing matches."
-  :group 'beardbolt)
+  "Face to fontify the current line for showing matches.")
 
-;;;; Basic model
 (defvar-local bb--asm-buffer nil)
 (defvar-local bb--source-buffer nil)
 (defvar-local bb--compile-spec nil)
@@ -109,7 +84,7 @@ Passed directly to compiler or disassembler."
 (defvar-local bb--rainbow-overlays nil "Rainbow overlays.")
 
 (defun bb--asm-buffer (src-buffer)
-  "Get/create output buffer for current source file."
+  "Get/create asm buffer for current source file."
   (with-current-buffer src-buffer
     (or (and (buffer-live-p bb--asm-buffer)
              (equal (buffer-name bb--asm-buffer) "*bb-asm*")
@@ -118,8 +93,6 @@ Passed directly to compiler or disassembler."
               (with-current-buffer
                   (get-buffer-create "*bb-asm*")
                 (current-buffer))))))
-
-(defvar bb-hide-compile t)
 
 (defvar bb-compile-delay 0.6
   "Time in seconds to delay before recompiling if there is a change.
@@ -511,9 +484,9 @@ Argument STR compilation finish status."
   (let* ((src-buffer bb--source-buffer)
          (compile-spec bb--compile-spec)
          (declared-output bb--declared-output)
-         (output-buffer (bb--asm-buffer src-buffer))
+         (asm-buffer (bb--asm-buffer src-buffer))
          (split-width-threshold (min split-width-threshold 100)))
-    (with-current-buffer output-buffer
+    (with-current-buffer asm-buffer
       (bb--asm-mode)
       (setq bb--source-buffer src-buffer)
       (let* ((inhibit-modification-hooks t)
@@ -677,7 +650,7 @@ With prefix argument, choose from starter files in `bb-starter-files'."
   (bb--when-live-buffer bb--asm-buffer
     (kill-buffer bb--asm-buffer)))
 
-(defun bb--on-kill-output-buffer ()
+(defun bb--on-kill-asm-buffer ()
   (bb--delete-rainbow-overlays))
 
 (defun bb--asm-buffer-pch ()
@@ -710,8 +683,6 @@ With prefix argument, choose from starter files in `bb-starter-files'."
             (cmd (bb--split-rm-single cmd "-flto" #'string-prefix-p)))
       cmd))
 
-;;;; Mode Definition:
-
 ;;;###autoload
 (define-minor-mode bb-mode
   "Toggle `beardbolt-mode'.  May be enabled by user in source buffer."
@@ -729,7 +700,7 @@ With prefix argument, choose from starter files in `bb-starter-files'."
 
 (define-derived-mode bb--asm-mode asm-mode "⚡asm ⚡"
   "Toggle `bearbolt--output-mode', internal mode for asm buffers."
-  (add-hook 'kill-buffer-hook #'bb--on-kill-output-buffer nil t)
+  (add-hook 'kill-buffer-hook #'bb--on-kill-asm-buffer nil t)
   (add-hook 'post-command-hook #'bb--asm-buffer-pch nil t)
   (setq truncate-lines t)
   (read-only-mode t)
