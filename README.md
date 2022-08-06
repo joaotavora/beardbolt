@@ -14,12 +14,6 @@ easy to see what the compiler is doing.
 It also highlights which source code corresponds to a given assembly,
 and vice versa.
 
-### Why RMSbolt over Beardbolt
-
-- Supports more languages/compilers. Beardbolt only C++/C clang/gcc for now.
-- Has good documentation and a proper API.
-- Supports more Emacs versions.  Beardbolt probably only 28+
-
 ### Why Beardbolt over RMSbolt
 
 - Doesn't require file to be saved.
@@ -27,6 +21,11 @@ and vice versa.
 - 🌈Has pretty rainbows🌈
 - Has more useful Godbolt features like "execute program" and "preserve/filter library functions" .
 - Simpler code (less than half the LOC, but also less funcional in some regards if we're honest).
+
+### Why RMSbolt over Beardbolt
+
+- Supports way more languages/compilers. Beardbolt only C, C++ and Rust.
+- Supports more Emacs versions.  Beardbolt probably only 28+
 
 ### Installation
 
