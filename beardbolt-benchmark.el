@@ -13,7 +13,7 @@
 (defun beardbolt-benchmark-beardbolt (repeats)
   (cl-loop
    repeat repeats
-   do (beardbolt-compile (beardbolt--get-lang))
+   do (call-interactively #'beardbolt-compile)
    (while (process-live-p
            (get-buffer-process (beardbolt--compilation-buffer)))
      (accept-process-output)))

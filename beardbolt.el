@@ -70,6 +70,9 @@ Passed directly to compiler or disassembler."
 (bb--defoption bb-demangle t
   "Non-nil to attempt to demangle the resulting assembly."
   :type 'boolean :safe 'booleanp)
+(bb--defoption bb-execute nil
+  "Non-nil to run resulting program with these arguments."
+  :type 'string :safe (lambda (v) (or (null v) (eq t v) (stringp v))))
 
 (defface bb-current-line-face
   '((t (:weight bold :inherit highlight)))
@@ -193,71 +196,68 @@ Useful if you have multiple objdumpers and want to select between them")
            concat (and (cl-plusp i) " ")
            and concat probe and do (setq split (cdr split))))
 
-(cl-defun bb--c/c++-compile-specs ()
+(cl-defun bb--c/c++-compile-specs (&key base-cmd language)
   "Get compile specs for gcc/clang."
-  (cl-labels ((tmp (f newext)
-                (expand-file-name
-                 (format "%s.%s" (file-name-base f) newext) (bb--sandbox-dir)))
-              (objdump (in)
-                (let ((out (tmp in "bb-objdumped")))
-                  `(("&&" ,bb-objdump-binary "-d" ,in
-                     "--insn-width=16" "-l"
-                     ,(when bb-asm-format
-                        (format "-M %s" bb-asm-format))
-                     ">" ,out)
-                    . ,out)))
-              (join (l &optional (sep " ")) (mapconcat #'identity l sep))
-              (munch (l) (join (mapcar #'join l) " \\\n")))
-    (let* ((direct-asm-out (tmp "beardbolt" "s"))
-           (disass-asm-out (tmp "beardbolt" "out"))
-           (base-command (ensure-list (or bb-command
-                                          (bb--guess-from-ccj)
-                                          (cl-getf (bb--get-lang) :base-cmd))))
-           (debug `("-g1"))
-           (stdin-process `("-x" ,(if (derived-mode-p 'c++-mode) "c++" "c") "-"))
-           (direct-asm `("-S" ,(format "-masm=%s" bb-asm-format)
-                         "-o" ,direct-asm-out))
-           (disass-asm `("-c" "-o" ,disass-asm-out)))
-      `((:compile
-         ,(lambda (dump-file)
+  (let* ((base-command (ensure-list (or bb-command
+                                        (bb--guess-from-ccj)
+                                        base-cmd)))
+         (cc (car (split-string (car base-command)))))
+    (cl-labels ((tmp (f) (expand-file-name f (bb--sandbox-dir)))
+                (join (l &optional (sep " ")) (mapconcat #'identity l sep))
+                (munch (l) (join (mapcar #'join l) " \\\n"))
+                (compile (dump) `(,@base-command
+                                  "-x" ,language "-"
+                                  "-g1"
+                                  "-S" ,(format "-masm=%s" bb-asm-format)
+                                  "-o" ,(tmp "beardbolt.s") "<" ,dump))
+                (assemble () `("&&" ,cc "-c" ,(tmp "beardbolt.s") "-o" ,(tmp "beardbolt.o")))
+                (link ()     `("&&" ,cc ,(tmp "beardbolt.o") "-o" ,(tmp "beardbolt.out")))
+                (execute ()  `("&& (" ,(tmp "beardbolt.out")
+                               ,(if (stringp bb-execute) bb-execute "")
+                               "|| true )"))
+                (disassemble () `("&&" ,bb-objdump-binary "-d"
+                                  ,(tmp "beardbolt.o") "--insn-width=16" "-l"
+                                  ,(when bb-asm-format (format "-M %s" bb-asm-format))
+                                  ">" ,(tmp "beardbolt.o.disass"))))
+      `((:compile ,(lambda (dump-file)
             (cons
-             (munch `(,base-command ,stdin-process ,debug
-                                    ,direct-asm ("<" ,dump-file)))
-             direct-asm-out))
+             (munch `(,(compile dump-file)
+                      ,(assemble)
+                      ,@(when bb-execute `(,(link)
+                                           ,(execute)))))
+             (tmp "beardbolt.s")))
          ,#'bb--process-asm)
         (:compile-assemble-disassemble
          ,(lambda (dump-file)
-            (let* ((objdump-pair (objdump disass-asm-out)))
-              (cons
-               (munch `(,base-command ,stdin-process ,debug
-                                      ,disass-asm ("<" ,dump-file)
-                                      ,(car objdump-pair)))
-               (cdr objdump-pair))))
+            (cons
+             (munch `(,(compile dump-file)
+                      ,(assemble)
+                      ,(disassemble)
+                      ,@(when bb-execute `(,(link)
+                                           ,(execute)))))
+             (tmp "beardbolt.o.disass")))
          ,#'bb--process-disassembled-lines)))))
 
 (defvar bb-languages
-  `((c-mode .   (:setup ,#'bb--c/c++-compile-specs :base-cmd "gcc"))
-    (c++-mode . (:setup ,#'bb--c/c++-compile-specs :base-cmd "g++")))
-  "Alist of (MAJOR-MODE . LANG-PLIST).
-LANG-PLIST has the following keywork-value pairs:
+  `((c-mode   ,#'bb--c/c++-compile-specs :base-cmd "gcc" :language "c")
+    (c++-mode ,#'bb--c/c++-compile-specs :base-cmd "g++" :language "c++"))
+  "Alist of (MAJOR-MODE SETUP . PLIST).
 
-* `:setup', a nullary function returning a list (SPEC ...) where
-  SPEC looks like (WHAT CMD-FN PROCESS).
+SETUP is a function called with `apply' on PLIST.
 
-  WHAT is a symbol `:compile' or `:compile-assemble-disassemble'.
+It returns a list (SPEC ...) where SPEC is (WHAT CMD-FN PROCESS).
 
-  CMD-FN is a function taking DUMP-FILE, name of the temp file
-  with the current buffer's content and returning a cons
-  cell (CMD . DECLARED-OUTPUT) where CMD is a string to pass to
-  `compilation-start' and DECLARED-OUTPUT is the name of the file
-  containing the output to insert into the asm buffer.
+WHAT is a symbol `:compile' or `:compile-assemble-disassemble'.
 
-  PROCESS is a nullary function to run in the asm buffer.  It
-  should clean up the buffer and setup a buffer-local value of
-  `beardbolt--line-mappings' (which see).
+CMD-FN is a function taking DUMP-FILE, name of the temp file
+with the current buffer's content and returning a cons
+cell (CMD . DECLARED-OUTPUT) where CMD is a string to pass to
+`compilation-start' and DECLARED-OUTPUT is the name of the file
+containing the output to insert into the asm buffer.
 
-* `:base-cmd', name of the compiler to run if user hasn't
-  specified one in `beardbolt-command'.")
+PROCESS is a nullary function to run in the asm buffer.  It
+should clean up the buffer and setup a buffer-local value of
+`beardbolt--line-mappings' (which see).")
 
 (defmacro bb--with-display-buffer-no-window (&rest body)
   "Run BODY without displaying any window."
@@ -517,21 +517,15 @@ Argument STR compilation finish status."
                       (get-buffer-window compilation-buffer))
             (display-buffer compilation-buffer `((display-buffer-use-least-recent-window))))))))))
 
-;;;;; Parsing Options
-(defvar-local bb--language-plist nil)
-(defun bb--get-lang ()
-  "Helper function to get lang def for LANGUAGE."
-  (or bb--language-plist (setq bb--language-plist
-                               (cdr (assoc major-mode bb-languages)))))
-
 (defun bb--compilation-buffer (&rest _)
   (get-buffer-create "*bb-compilation*"))
 
 ;;;;; UI Functions
-(defun bb-compile (lang)
-  "Run beardbolt on current buffer for LANG.
-Interactively, determine LANG from `major-mode'."
-  (interactive (list (bb--get-lang)))
+(defun bb-compile (lang-desc)
+  "Run beardbolt on current buffer for LANG-DESC.
+LANG-DESC is an element of `beardbolt-languages'.  Interactively,
+determine LANG from `major-mode'."
+  (interactive (list (assoc major-mode bb-languages)))
   (bb--maybe-stop-running-compilation)
   (mapatoms (lambda (s) (when (get s 'bb--option) (kill-local-variable s))))
   (cl-letf (((symbol-function 'hack-local-variables-confirm)
@@ -544,7 +538,7 @@ Interactively, determine LANG from `major-mode'."
   (let* ((dump-file (make-temp-file "beardbolt-dump-" nil
                                     (concat "." (file-name-extension buffer-file-name))))
          (src-buffer (current-buffer))
-         (specs (funcall (plist-get lang :setup)))
+         (specs (apply (cadr lang-desc) (cddr lang-desc)))
          (spec (alist-get
                 (if bb-disassemble :compile-assemble-disassemble :compile)
                 specs))
@@ -656,7 +650,8 @@ With prefix argument, choose from starter files in `bb-starter-files'."
   (when bb-compile-delay
     (when (timerp bb--change-timer) (cancel-timer bb--change-timer))
     (setq bb--change-timer
-          (run-with-timer bb-compile-delay nil #'bb-compile (bb--get-lang)))))
+          (run-with-timer bb-compile-delay nil #'bb-compile
+                          (assoc major-mode bb-languages)))))
 
 (defun bb--guess-from-ccj ()
   (if-let* ((ccj-basename "compile_commands.json")
@@ -695,13 +690,6 @@ With prefix argument, choose from starter files in `bb-starter-files'."
   (read-only-mode t)
   (buffer-disable-undo)
   (local-set-key (kbd "q") 'quit-window))
-
-;;;###autoload
-(defun beardbolt ()
-  "Start beardbolt compilation, enable `bearbolt-mode'."
-  (interactive)
-  (unless bb-mode (bb-mode))
-  (bb-compile (bb--get-lang)))
 
 (provide 'beardbolt)
 
