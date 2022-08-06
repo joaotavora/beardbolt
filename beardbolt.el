@@ -497,11 +497,16 @@ Argument STR compilation finish status."
       (bb--asm-mode)
       (setq bb--source-buffer src-buffer)
       (let* ((inhibit-modification-hooks t)
-             (inhibit-read-only t))
+             (inhibit-read-only t)
+             (cwindow (get-buffer-window compilation-buffer))
+             window)
         (erase-buffer)
         (cond
          ((string-match "^finished" str)
-          (display-buffer (current-buffer) `((display-buffer-use-least-recent-window)))
+          (when (and cwindow (bb--get bb-execute))
+            (set-window-dedicated-p cwindow 'soft))
+          (setq window
+                (display-buffer (current-buffer) `((display-buffer-use-least-recent-window))))
           (mapc #'delete-overlay (overlays-in (point-min) (point-max)))
           (insert-file-contents declared-output)
           (setq bb--line-mappings nil)
@@ -510,7 +515,13 @@ Argument STR compilation finish status."
           (when (bb--get bb-demangle)
             (shell-command-on-region (point-min) (point-max) "c++filt"
                                      (current-buffer) 'no-mark))
-          (bb--rainbowize src-buffer))
+          (bb--rainbowize src-buffer)
+          (when (and (bb--get bb-execute) (null cwindow))
+            (setq cwindow
+                  (with-selected-window window
+                    (display-buffer compilation-buffer
+                                    `((display-buffer-below-selected)))))
+            (set-window-dedicated-p cwindow 'soft)))
          (t
           (insert "<Compilation failed>")
           (unless (or (string-match "^interrupt" str)
