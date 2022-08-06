@@ -259,12 +259,6 @@ PROCESS is a nullary function to run in the asm buffer.  It
 should clean up the buffer and setup a buffer-local value of
 `beardbolt--line-mappings' (which see).")
 
-(defmacro bb--with-display-buffer-no-window (&rest body)
-  "Run BODY without displaying any window."
-  ;; See http://debbugs.gnu.org/13594
-  `(let ((display-buffer-overriding-action (list #'display-buffer-no-window)))
-     ,@body))
-
 (defmacro bb--get (sym) `(buffer-local-value ',sym bb--source-buffer))
 
 (defmacro bb--sweeping (&rest forms)
@@ -498,15 +492,10 @@ Argument STR compilation finish status."
       (setq bb--source-buffer src-buffer)
       (let* ((inhibit-modification-hooks t)
              (inhibit-read-only t)
-             (cwindow (get-buffer-window compilation-buffer))
-             window)
+             (window (display-buffer (current-buffer))))
         (erase-buffer)
         (cond
          ((string-match "^finished" str)
-          (when (and cwindow (bb--get bb-execute))
-            (set-window-dedicated-p cwindow 'soft))
-          (setq window
-                (display-buffer (current-buffer) `((display-buffer-use-least-recent-window))))
           (mapc #'delete-overlay (overlays-in (point-min) (point-max)))
           (insert-file-contents declared-output)
           (setq bb--line-mappings nil)
@@ -515,18 +504,18 @@ Argument STR compilation finish status."
           (when (bb--get bb-demangle)
             (shell-command-on-region (point-min) (point-max) "c++filt"
                                      (current-buffer) 'no-mark))
-          (bb--rainbowize src-buffer)
-          (when (and (bb--get bb-execute) (null cwindow))
-            (setq cwindow
-                  (with-selected-window window
-                    (display-buffer compilation-buffer
-                                    `((display-buffer-below-selected)))))
-            (set-window-dedicated-p cwindow 'soft)))
+          (bb--rainbowize src-buffer))
          (t
-          (insert "<Compilation failed>")
-          (unless (or (string-match "^interrupt" str)
-                      (get-buffer-window compilation-buffer))
-            (display-buffer compilation-buffer `((display-buffer-use-least-recent-window))))))))))
+          (insert "<Compilation failed>")))
+        (unless (or (string-match "^interrupt" str)
+                    (get-buffer-window compilation-buffer)
+                    (and (string-match "^finished" str)
+                         (not (bb--get bb-execute))))
+          (with-selected-window window
+            (let ((cwindow
+                   (display-buffer compilation-buffer
+                                   `((display-buffer-below-selected)))))
+              (set-window-dedicated-p cwindow 'bb-dedication))))))))
 
 (defun bb--compilation-buffer (&rest _)
   (get-buffer-create "*bb-compilation*"))
@@ -562,8 +551,7 @@ determine LANG from `major-mode'."
                                    shell-file-name))
               (compilation-auto-jump-to-first-error t))
           ;; TODO should this be configurable?
-          (bb--with-display-buffer-no-window
-           (compilation-start cmd nil #'bb--compilation-buffer)))
+          (compilation-start cmd nil #'bb--compilation-buffer))
       ;; Only jump to errors, skip over warnings
       (setq-local compilation-skip-threshold 2)
       (setq-local compilation-always-kill t)
