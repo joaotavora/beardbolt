@@ -23,9 +23,9 @@ and vice versa.
 ### Why Beardbolt over RMSbolt
 
 - Doesn't require file to be saved.
-- 2-5x faster on typical files.  See [here for benchmarks](#benchmarks).
+- 3-5x faster on typical files.  See [here for benchmarks](#benchmarks).
 - 🌈Has pretty rainbows🌈
-- Has the useful "preserve library functions" feature of Godbolt.
+- Has more useful Godbolt features like "execute program" and "preserve/filter library functions" .
 - Simpler code (less than half the LOC, but also less funcional in some regards if we're honest).
 
 ### Installation
@@ -43,6 +43,48 @@ make
 ```
 M-x beardbolt-starter
 ```
+
+### Main commands
+
+* `beardbolt-starter`: Lets you start a new experiment in one of the
+  supported languages.  Automatically start `beardbolt-mode`.
+  
+* `beardbolt-mode`: Starts a minor mode that automatically re-compiles
+  buffer code every few changes to the source code.
+  
+* `beardbolt-compile`: Manually start a compilation.  Bound to `C-c
+  C-c` in `beardbolt-mode`.
+
+### Options as local variables
+
+Beardbolt's behaviour can be tweaked with the follow options.  You may
+set them globally (they're Emacs customization variables), but it's
+probably more useful to write them as file-local variable cookies
+instead.  Beardbolt will pick them up immediately on each run.
+
+* `beardbolt-command`: Main compiler command to run.  May be something like
+  `"gcc -O3"`.  Leave unset to have Beardbolt try to guess from some
+  nearby `compilation_commands.json`.
+
+* `beardbolt-disassemble`: Compile, assemble, then disassemble using
+  `objdump` and present that input instead of assembly code.
+  
+* `beardbolt-asm-format`: Choose between `intel` and `att` formats.
+
+* `beardbolt-preserve-directives`: Keep every non-code, non-label asm
+  directive.
+  
+* `beardbolt-preserve-unused-labels`: Keep unused asm labels.
+
+* `beardbolt-preserve-library-functions`: Keep functions with no code
+  related to current file.
+  
+* `beardbolt-demangle`: Demangle any mangled symbols of resulting
+  assembly with `c++filt`.
+  
+* `beardbolt-execute`: If non-nil, run the resulting program in the
+  compilation buffer.  If a string, run with these arguments.  If t
+  runs without arguments.
 
 <a name="benchmarks"></a>
 ### Benchmarks vs RMSbolt
