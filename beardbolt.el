@@ -196,100 +196,101 @@ Useful if you have multiple objdumpers and want to select between them")
            concat (and (cl-plusp i) " ")
            and concat probe and do (setq split (cdr split))))
 
-(cl-defun bb--c/c++-compile-specs (&key base-cmd language)
+(cl-defun bb--c/c++-setup (&key base-cmd language)
   "Get compile specs for gcc/clang."
   (let* ((base-command (ensure-list (or bb-command
                                         (bb--guess-from-ccj)
                                         base-cmd)))
          (cc (car (split-string (car base-command)))))
-    (cl-labels ((tmp (f) (expand-file-name f (bb--sandbox-dir)))
-                (join (l &optional (sep " ")) (mapconcat #'identity l sep))
-                (munch (l) (join (mapcar #'join l) " \\\n"))
-                (compile (dump) `(,@base-command
-                                  "-x" ,language "-"
-                                  "-g1"
-                                  "-S" ,(format "-masm=%s" bb-asm-format)
-                                  "-o" ,(tmp "beardbolt.s") "<" ,dump))
-                (assemble () `("&&" ,cc "-c" ,(tmp "beardbolt.s") "-o" ,(tmp "beardbolt.o")))
-                (link ()     `("&&" ,cc ,(tmp "beardbolt.o") "-o" ,(tmp "beardbolt.out")))
-                (execute ()  `("&& (" ,(tmp "beardbolt.out")
-                               ,(if (stringp bb-execute) bb-execute "")
-                               "|| true )"))
-                (disassemble () `("&&" ,bb-objdump-binary "-d"
-                                  ,(tmp "beardbolt.o") "--insn-width=16" "-l"
-                                  ,(when bb-asm-format (format "-M %s" bb-asm-format))
-                                  ">" ,(tmp "beardbolt.o.disass"))))
+    (cl-labels ((f (x) (expand-file-name x (bb--sandbox-dir)))
+                (compile (in out) `(,@base-command
+                                    "-x" ,language "-"
+                                    "-g1"
+                                    "-S" ,(format "-masm=%s" bb-asm-format)
+                                    "-o" ,out "<" ,in))
+                (assemble (in out) `("&&" ,cc "-c" ,in "-o" ,out))
+                (link     (in out) `("&&" ,cc ,in      "-o" ,out))
+                (execute  (in)     `("&& (" ,in
+                                     ,(if (stringp bb-execute) bb-execute "")
+                                     "|| true )"))
+                (disassemble (in out) `("&&" ,bb-objdump-binary "-d"
+                                        ,in "--insn-width=16" "-l"
+                                        ,(when bb-asm-format (format "-M %s" bb-asm-format))
+                                        ">" ,out)))
       `((:compile
          ,(lambda (dump-file)
             (cons
-             (munch `(,(compile dump-file)
-                      ,(assemble)
-                      ,@(when bb-execute `(,(link)
-                                           ,(execute)))))
-             (tmp "beardbolt.s")))
+             `(,(compile dump-file (f "beardbolt.s"))
+               ,@(when bb-execute
+                   `(,(assemble (f "beardbolt.s") (f "beardbolt.o"))
+                     ,(link     (f "beardbolt.o") (f "beardbolt.out"))
+                     ,(execute  (f "beardbolt.out")))))
+             (f "beardbolt.s")))
          ,(lambda (_dump-file) (bb--process-asm "<stdin>")))
         (:compile-assemble-disassemble
          ,(lambda (dump-file)
             (cons
-             (munch `(,(compile dump-file)
-                      ,(assemble)
-                      ,(disassemble)
-                      ,@(when bb-execute `(,(link)
-                                           ,(execute)))))
-             (tmp "beardbolt.o.disass")))
+             `(,(compile     dump-file         (f "beardbolt.s"))
+               ,(assemble    (f "beardbolt.s") (f "beardbolt.o"))
+               ,(disassemble (f "beardbolt.o") (f "beardbolt.o.disass"))
+               ,@(when bb-execute
+                   `(,(link    (f "beardbolt.o") (f "beardbolt.out"))
+                     ,(execute (f "beardbolt.out")))))
+             (f "beardbolt.o.disass")))
          ,(lambda (_dump-file)
             (bb--process-disassembled-lines "<stdin>")))))))
 
-(cl-defun bb--rust-compile-specs () "Get compile specs for rustc"
+(cl-defun bb--rust-setup () "Get compile specs for rustc"
   (let* ((base (ensure-list (or bb-command "rustc"))))
-    (cl-labels ((tmp (f) (expand-file-name f (bb--sandbox-dir)))
-                (join (l &optional (sep " ")) (mapconcat #'identity l sep))
-                (munch (l) (join (mapcar #'join l) " \\\n"))
-                (disassemble () `("&&" ,bb-objdump-binary "-d"
-                                  ,(tmp "beardbolt.o") "--insn-width=16" "-l"
-                                  ,(when bb-asm-format (format "-M %s" bb-asm-format))
-                                  ">" ,(tmp "beardbolt.o.disass")))
-                (link (dump)
-                  `(,@base "-C debuginfo=1" "--emit" "link" ,dump "-o" ,(tmp "beardbolt.o")))
-                (compile (dump)
-                  `(,@base "-C debuginfo=1" "--emit" "asm" ,dump
+    (cl-labels ((f (x) (expand-file-name x (bb--sandbox-dir)))
+                (disassemble (in out) `("&&" ,bb-objdump-binary "-d"
+                                        ,in "--insn-width=16" "-l"
+                                        ,(when bb-asm-format (format "-M %s" bb-asm-format))
+                                        ">" ,out))
+                (link (in out)
+                  `(,@base "-C debuginfo=1" "--emit" "link" ,in "-o" ,out))
+                (compile (in out)
+                  `(,@base "-C debuginfo=1" "--emit" "asm" ,in
                            ,(when bb-asm-format (format
                                                  "-Cllvm-args=--x86-asm-syntax=%s"
                                                  bb-asm-format))
-                           "-o" ,(tmp "beardbolt.s"))))
-      `((:compile ,(lambda (dump-file)
+                           "-o" ,out)))
+      `((:compile
+         ,(lambda (dump-file)
             (cons
-             (munch `(,(compile dump-file)))
-             (tmp "beardbolt.s")))
+             (compile dump-file (f "beardbolt.s"))
+             (f "beardbolt.s")))
          ,#'bb--process-asm)
         (:compile-assemble-disassemble
          ,(lambda (dump-file)
             (cons
-             (munch `(,(link dump-file)
-                      ,(disassemble)))
-             (tmp "beardbolt.o.disass")))
+             `(,(link        dump-file         (f "beardbolt.o"))
+               ,(disassemble (f "beardbolt.o") (f "beardbolt.o.disass")))
+             (f "beardbolt.o.disass")))
          ,#'bb--process-disassembled-lines)))))
 
 (defvar bb-languages
-  `((c-mode   ,#'bb--c/c++-compile-specs :base-cmd "gcc" :language "c")
-    (c++-mode ,#'bb--c/c++-compile-specs :base-cmd "g++" :language "c++")
-    (rust-mode ,#'bb--rust-compile-specs))
+  `((c-mode    ,#'bb--c/c++-setup :base-cmd "gcc" :language "c")
+    (c++-mode  ,#'bb--c/c++-setup :base-cmd "g++" :language "c++")
+    (rust-mode ,#'bb--rust-setup))
   "Alist of (MAJOR-MODE SETUP . SETUP-ARGS).
 
 SETUP is a function called with `apply' on SETUP-ARGS.
 
-It returns a list (SPEC ...) where SPEC is (WHAT CMD-FN GROK).
+It returns a list (SPEC ...) where SPEC is (WHAT CMD-FN PRETTY-FN).
 
 WHAT is a symbol `:compile' or `:compile-assemble-disassemble'.
 
-CMD-FN is a function taking DUMP-FILE, name of the temp file with
+CMD-FN is a function taking IN-FILE, name of the temp file with
 the current buffer's content, and returning a cons cell (CMD
-. DECLARED-OUTPUT) where CMD is a string to pass to
-`compilation-start' and DECLARED-OUTPUT is the name of the file
-containing the output to insert into the asm buffer.
+. OUT-FILE).  CMD is a string or a tree of strings.  When
+flattened and joined with whitespace, it represents a shell
+command to produce a file named OUT-FILE, whose contents are
+inserted into the asm buffer.
 
-GROK is a function taking DUMP-FILE, to run in the asm buffer.
-It should clean up the buffer and setup a buffer-local value of
+PRETTY-FN is a function taking IN-FILE, to run in the asm buffer
+where OUT-FILE's contents are freshly inserted. It may clean up
+some parts of the buffer and setup a buffer-local value of
 `beardbolt--line-mappings' (which see).")
 
 (defmacro bb--get (sym) `(buffer-local-value ',sym bb--source-buffer))
@@ -576,7 +577,11 @@ determine LANG from `major-mode'."
                 (if bb-disassemble :compile-assemble-disassemble :compile)
                 specs))
          (command-and-declared-output (funcall (car spec) dump-file))
-         (cmd (car command-and-declared-output)))
+         (cmd (car command-and-declared-output))
+         (cmd (mapconcat
+               (lambda (s) (if (stringp s) s
+                             (mapconcat #'identity (flatten-list s) " ")))
+               (ensure-list cmd) " \\\n")))
     (let ((inhibit-message t))
       (write-region (point-min) (point-max) dump-file))
     (with-current-buffer ; With compilation buffer
