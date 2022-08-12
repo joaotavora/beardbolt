@@ -84,6 +84,10 @@ instead.  Beardbolt will pick them up immediately on each run.
 * `beardbolt-execute`: If non-nil, run the resulting program in the
   compilation buffer.  If a string, run with these arguments.  If t
   runs without arguments.
+  
+* `beardbolt-ccj-extra-flags`: A string of extra compilation flags to
+  append to the compilation command devined from
+  `compile_commands.json`.
 
 <a name="benchmarks"></a>
 ### Benchmarks vs RMSbolt

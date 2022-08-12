@@ -73,6 +73,9 @@ Passed directly to compiler or disassembler."
 (bb--defoption bb-execute nil
   "Non-nil to run resulting program with these arguments."
   :type 'string :safe (lambda (v) (or (null v) (eq t v) (stringp v))))
+(bb--defoption bb-ccj-extra-flags nil
+  "Extra flags for compilation command devined from compile_commands.json."
+  :type 'string :safe (lambda (v) (or (null v) (stringp v))))
 
 (defface bb-current-line-face
   '((t (:weight bold :inherit highlight)))
@@ -705,8 +708,9 @@ With prefix argument, choose from starter files in `bb-starter-files'."
                           return (plist-get e :command)))
             (cmd (bb--split-rm-double cmd "-o"))
             (cmd (bb--split-rm-double cmd "-c"))
-            (cmd (bb--split-rm-single cmd "-flto" #'string-prefix-p)))
-      cmd))
+            (cmd (bb--split-rm-single cmd "-flto" #'string-prefix-p))
+            (cmd (bb--split-rm-single cmd "-O" #'string-prefix-p)))
+      (list cmd bb-ccj-extra-flags)))
 
 ;;;###autoload
 (define-minor-mode bb-mode
