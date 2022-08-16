@@ -201,16 +201,21 @@ Useful if you have multiple objdumpers and want to select between them")
 
 (cl-defun bb--c/c++-setup (&key base-cmd language)
   "Get compile specs for gcc/clang."
-  (let* ((base-command (ensure-list (or bb-command
+  (let* ((modified-p (buffer-modified-p))
+         (source-hint (if modified-p "<stdin>" (file-name-nondirectory
+                                                (buffer-file-name))))
+         (base-command (ensure-list (or bb-command
                                         (bb--guess-from-ccj)
                                         base-cmd)))
          (cc (car (split-string (car base-command)))))
     (cl-labels ((f (x) (expand-file-name x (bb--sandbox-dir)))
                 (compile (in out) `(,@base-command
-                                    "-x" ,language "-"
                                     "-g1"
                                     "-S" ,(format "-masm=%s" bb-asm-format)
-                                    "-o" ,out "<" ,in))
+                                    "-o" ,out
+                                    ,@(if modified-p
+                                          `("-x" ,language "-" "<" ,in)
+                                        `(,(buffer-file-name)))))
                 (assemble (in out) `("&&" ,cc "-c" ,in "-o" ,out))
                 (link     (in out) `("&&" ,cc ,in      "-o" ,out))
                 (execute  (in)     `("&& (" ,in
@@ -229,7 +234,7 @@ Useful if you have multiple objdumpers and want to select between them")
                      ,(link     (f "beardbolt.o") (f "beardbolt.out"))
                      ,(execute  (f "beardbolt.out")))))
              (f "beardbolt.s")))
-         ,(lambda (_dump-file) (bb--process-asm "<stdin>")))
+         ,(lambda (_dump-file) (bb--process-asm source-hint)))
         (:compile-assemble-disassemble
          ,(lambda (dump-file)
             (cons
@@ -241,7 +246,7 @@ Useful if you have multiple objdumpers and want to select between them")
                      ,(execute (f "beardbolt.out")))))
              (f "beardbolt.o.disass")))
          ,(lambda (_dump-file)
-            (bb--process-disassembled-lines "<stdin>")))))))
+            (bb--process-disassembled-lines source-hint)))))))
 
 (cl-defun bb--rust-setup () "Get compile specs for rustc"
   (let* ((base (ensure-list (or bb-command "rustc"))))
