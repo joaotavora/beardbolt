@@ -2,10 +2,9 @@
 
 ![beardbolt in action](./beardbolt.gif)
 
-An experimental fork-rewrite of
-[RMSbolt](https://gitlab.com/jgkamat/rmsbolt), itself a supercharged
-implementation of [godbolt, the
-compiler-explorer](https://github.com/mattgodbolt/compiler-explorer)
+A fork-rewrite of [RMSbolt](https://gitlab.com/jgkamat/rmsbolt),
+itself a supercharged implementation of [Godbolt, the
+Compiler Explorer](https://github.com/mattgodbolt/compiler-explorer)
 but for Emacs, instead of a clunky browser.
 
 Beardbolt shows assembly output for given source code file, making it
@@ -16,11 +15,14 @@ and vice versa.
 
 ### Why Beardbolt over RMSbolt
 
+- 3-5x faster on typical files, more on larger files.  See [here for
+  benchmarks](#benchmarks).
 - Doesn't require file to be saved.
-- 3-5x faster on typical files.  See [here for benchmarks](#benchmarks).
 - 🌈Has pretty rainbows🌈
-- Has more useful Godbolt features like "execute program" and "preserve/filter library functions" .
-- Simpler code (less than half the LOC, but also less funcional in some regards if we're honest).
+- Has useful Godbolt features like "execute program" and
+  "preserve/filter library functions" .
+- Simpler code (less than half the LOC, though less funcional in some
+  regards if we're honest).
 
 ### Why RMSbolt over Beardbolt
 
@@ -56,10 +58,13 @@ M-x beardbolt-starter
 
 ### Options as local variables
 
-Beardbolt's behaviour can be tweaked with the follow options.  You may
-set them globally (they're Emacs customization variables), but it's
-probably more useful to write them as file-local variable cookies
-instead.  Beardbolt will pick them up immediately on each run.
+Beardbolt's behaviour can be tweaked with some options that more or
+less correspond to the ones of Compiler Explorer.  You may set them
+globally (they're normal Emacs customization variables), but they're
+probably more useful as file-local cookies, like you see in the
+animated gif above.
+
+Beardbolt will pick them up immediately on each run.
 
 * `beardbolt-command`: Main compiler command to run.  May be something like
   `"gcc -O3"`.  Leave unset to have Beardbolt try to guess from some
@@ -82,7 +87,7 @@ instead.  Beardbolt will pick them up immediately on each run.
   assembly with `c++filt`.
   
 * `beardbolt-execute`: If non-nil, run the resulting program in the
-  compilation buffer.  If a string, run with these arguments.  If t
+  compilation buffer.  If a string, run with these arguments.  If `t`,
   runs without arguments.
   
 * `beardbolt-ccj-extra-flags`: A string of extra compilation flags to
@@ -92,20 +97,16 @@ instead.  Beardbolt will pick them up immediately on each run.
 <a name="benchmarks"></a>
 ### Benchmarks vs RMSbolt
 
-First note that Beardbolt is highly hacky/experimental and may be
-providing incorrect results, in which case most/all of the following
-benchmarks/comparisons are probably invalid.
+First, a word on what "fast" means.  The performance metric to
+optimize is responsiveness: the goal is not only to provide this a
+live view of the assembly output as quickly as possible, and also to
+intrude as little as possible in the user's editing.
 
-Second, a word on what "fast" means: the performance metric to
-optimize is responsiveness.  Both Beardbolt and RMSbolt continuously
-analyze the program to present a "live" view of its assembly output.
-The goal is not only to provide this service as quickly as possible,
-but also to intrude as little as possible in the user's editing.
+Both Beardbolt and RMSbolt extensions work in a two-step fashion.
+Most of the speed gains of Beardbolt happen in step 2.
 
-Both extensions work in a two-step fashion.  Beardbolt tries to
-optimize step 2.
-
-1. The file is saved and partially compiled by an external program
+1. The file is saved somewhere and partially compiled by an external
+   program
 
    This happens asynchronously.  It might takes several seconds and
    spin up your CPU, but it does not generally harm the UX inside
@@ -155,7 +156,7 @@ two [cppreference.com](https://cppreference.com) examples
 
 To make the benchmark fair(er?) I patched `rmsbolt.el` to generate
 slightly less debug with `-g1` instead of `-g`, and thus benefit from
-the same speedup that `beardbolt.el` uses.
+the same speedup that `beardbolt.el`.
 
 The results were obtained on my Thinkpad T480 running Emacs 29
 (without native compilation).
