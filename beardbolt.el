@@ -524,17 +524,20 @@ some parts of the buffer and setup a buffer-local value of
 Argument STR compilation finish status."
   (let* ((dump-file-name bb--dump-file)
          (src-buffer bb--source-buffer)
+         (origin-window (or (get-buffer-window src-buffer)
+                            (selected-window)))
          (compile-spec bb--compile-spec)
          (declared-output bb--declared-output)
-         (asm-buffer (bb--asm-buffer src-buffer))
-         (split-width-threshold (min split-width-threshold 100)))
+         (asm-buffer (bb--asm-buffer src-buffer)))
     (delete-file dump-file-name)
     (with-current-buffer asm-buffer
       (bb--asm-mode)
       (setq bb--source-buffer src-buffer)
       (let* ((inhibit-modification-hooks t)
              (inhibit-read-only t)
-             (window (display-buffer (current-buffer))))
+             (window
+              (with-selected-window origin-window
+                (display-buffer asm-buffer '(nil (inhibit-same-window . t))))))
         (erase-buffer)
         (cond
          ((string-match "^finished" str)
