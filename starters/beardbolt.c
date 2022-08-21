@@ -17,5 +17,10 @@ int main(int argc, char *argv[]) {
 
 /* Local Variables: */
 /* beardbolt-command: "gcc -O3" */
-/* rmsbolt-command: "gcc -O3" */
+/* beardbolt-demangle: t */
+/* beardbolt-execute: t */
+/* beardbolt-disassemble: nil */
+/* beardbolt-preserve-library-functions: nil */
+/* beardbolt-preserve-unused-labels: nil */
+/* beardbolt-preserve-directives: nil */
 /* End: */

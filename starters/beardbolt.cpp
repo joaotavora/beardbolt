@@ -22,6 +22,7 @@ int main() {
 // Local Variables:
 // beardbolt-command: "g++ -std=c++20 -O0"
 // beardbolt-demangle: t
+// beardbolt-execute: t
 // beardbolt-disassemble: nil
 // beardbolt-preserve-library-functions: nil
 // beardbolt-preserve-unused-labels: nil
