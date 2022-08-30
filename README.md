@@ -93,6 +93,9 @@ Beardbolt will pick them up immediately on each run.
 * `beardbolt-ccj-extra-flags`: A string of extra compilation flags to
   append to the compilation command devined from
   `compile_commands.json`.
+  
+* `beardbolt-shuffle-rainbow`: Use less pretty rainbow colors, but
+  potentially more useful and contrasting ones.
 
 <a name="benchmarks"></a>
 ### Benchmarks vs RMSbolt

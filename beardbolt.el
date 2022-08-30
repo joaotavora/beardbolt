@@ -77,6 +77,9 @@ Passed directly to compiler or disassembler."
 (bb--defoption bb-ccj-extra-flags nil
   "Extra flags for compilation command devined from compile_commands.json."
   :type 'string :safe (lambda (v) (or (null v) (stringp v))))
+(bb--defoption bb-shuffle-rainbow nil
+  "Choose less pretty, but potentially more contrasting rainbow colors."
+  :type 'boolean :safe 'booleanp)
 
 (defface bb-current-line-face
   '((t (:weight bold :inherit highlight)))
@@ -444,6 +447,7 @@ some parts of the buffer and setup a buffer-local value of
          all-ovs
          (idx 0)
          total
+         (shuffle (buffer-local-value 'bb-shuffle-rainbow src-buffer))
          (ht (make-hash-table)))
     (cl-loop initially (goto-char (point-min))
              with current-line = 1
@@ -465,8 +469,11 @@ some parts of the buffer and setup a buffer-local value of
      (lambda (src-line asm-pos-regions)
        (when (not (zerop src-line))
          (cl-loop
+          with i = (if shuffle
+                       (mod (* 27 (cl-incf idx)) total)
+                     (cl-incf idx))
           with bright-hsl =(list (mod (+ (cl-first background-hsl)
-                                         (/ (cl-incf idx) (float total)))
+                                         (/ i (float total)))
                                       1)
                                  (min (max (cl-second background-hsl)
                                            0.25)
