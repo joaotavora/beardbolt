@@ -36,6 +36,7 @@
 (require 'disass)
 (require 'json)
 (require 'color)
+(require 'pulse)
 
 ;;; Code:
 (defgroup beardbolt nil
@@ -464,17 +465,20 @@ some parts of the buffer and setup a buffer-local value of
      (lambda (src-line asm-pos-regions)
        (when (not (zerop src-line))
          (cl-loop
-          with color =
-          (apply #'color-rgb-to-hex
-                 (color-hsl-to-rgb (mod (+ (cl-first background-hsl)
-                                           (/ (cl-incf idx) (float total)))
-                                        1)
-                                   (min (max (cl-second background-hsl)
-                                             0.25)
-                                        0.8)
-                                   (min (max (cl-third background-hsl)
-                                             0.25)
-                                        0.8)))
+          with bright-hsl =(list (mod (+ (cl-first background-hsl)
+                                         (/ (cl-incf idx) (float total)))
+                                      1)
+                                 (min (max (cl-second background-hsl)
+                                           0.25)
+                                      0.8)
+                                 (min (max (cl-third background-hsl)
+                                           0.25)
+                                      0.8))
+          with muted-hsl = (list (car bright-hsl)
+                                 (/ (cadr bright-hsl) 2.0)
+                                 (caddr bright-hsl))
+          with color = (apply #'color-rgb-to-hex (apply #'color-hsl-to-rgb bright-hsl))
+          with muted-color = (apply #'color-rgb-to-hex (apply #'color-hsl-to-rgb muted-hsl))
           for (beg . end) in asm-pos-regions
           for asm-ov = (make-overlay beg end)
           do
@@ -482,7 +486,8 @@ some parts of the buffer and setup a buffer-local value of
           (push asm-ov all-ovs)
           (overlay-put asm-ov 'face `(:background ,color))
           (overlay-put asm-ov 'beardbolt-rainbow-face `(:background ,color))
-          (overlay-put asm-ov 'beardbolt t)
+          (overlay-put asm-ov 'beardbolt-muted-face `(:background ,muted-color))
+          (overlay-put asm-ov 'beardbolt 'asm)
           collect asm-ov into this-lines-asm-overlays
           finally
           (with-current-buffer src-buffer
@@ -497,6 +502,7 @@ some parts of the buffer and setup a buffer-local value of
                   (overlay-put o 'beardbolt-related-overlays group))
                 (overlay-put ov 'face `(:background ,color))
                 (overlay-put ov 'beardbolt-rainbow-face `(:background ,color))
+                (overlay-put ov 'beardbolt-muted-face `(:background ,muted-color))
                 (overlay-put ov 'beardbolt t)
                 (push ov all-ovs)))))))
      ht)
@@ -666,37 +672,59 @@ With prefix argument, choose from starter files in `bb-starter-files'."
       (find-file sandbox-file)
       (bb-mode 1))))
 
-(defun bb--recenter-maybe (pos)
-  (cl-loop for w in (cl-remove-if (lambda (w)
-                                    (and (>= pos (* 1.1 (window-start w)))
-                                         (<= pos (* 0.9 (window-end w)))))
-                                  (get-buffer-window-list))
-           unless (eq w (selected-window))
-           do (set-window-point w pos)
-           (with-selected-window w (recenter))))
+(defun bb--recenter-maybe (ov)
+  (bb--when-live-buffer (overlay-buffer ov)
+    (cl-loop with pos = (overlay-start ov)
+             for w in (cl-remove-if (lambda (w)
+                                      (and (>= pos (* 1.1 (window-start w)))
+                                           (<= pos (* 0.9 (window-end w)))))
+                                    (get-buffer-window-list))
+             unless (eq w (selected-window))
+             do (set-window-point w pos)
+             (with-selected-window w (recenter)))))
 
 (defvar bb--currently-synched-overlays nil)
 
 (defun bb--synch-relation-overlays ()
   (let* ((at-point (overlays-at (point)))
-         has-recentered
+         (all-ovs (if (eq major-mode 'bb--asm-mode)
+                      bb--rainbow-overlays
+                    (buffer-local-value 'bb--rainbow-overlays bb--asm-buffer)))
          (ov (cl-find-if (lambda (ov) (overlay-get ov 'beardbolt-rainbow-face))
                          at-point)))
     (cond ((and ov (not (member ov bb--currently-synched-overlays)))
-           (dolist (oov bb--currently-synched-overlays)
-             (overlay-put oov 'face (overlay-get ov 'beardbolt-rainbow-face)))
+           (dolist (o all-ovs)
+             (overlay-put o 'face (overlay-get o 'beardbolt-muted-face)))
            (setq bb--currently-synched-overlays
                  (overlay-get ov 'beardbolt-related-overlays))
-           (dolist (oov bb--currently-synched-overlays)
-             (unless (or has-recentered
-                         (eq (overlay-buffer oov) (overlay-buffer ov)))
-               (bb--when-live-buffer (overlay-buffer oov)
-                 (bb--recenter-maybe (overlay-start oov))
-                 (setq has-recentered t)))
-             (overlay-put oov 'face 'bb-current-line-face)))
+           (setq bb--currently-synched-overlays
+                 (cl-sort bb--currently-synched-overlays #'< :key #'overlay-start))
+           (dolist (o bb--currently-synched-overlays)
+             (overlay-put o 'face 'bb-current-line-face))
+           (let* ((other-buffer-overlays
+                   (cl-remove (current-buffer)
+                              bb--currently-synched-overlays
+                              :key #'overlay-buffer))
+                  (recenter-target (car other-buffer-overlays))
+                  (pulse-delay 0.01)
+                  (asm-overlays
+                   (cl-remove-if-not (lambda (ov)
+                                       (eq 'asm (overlay-get ov 'beardbolt)))
+                                     bb--currently-synched-overlays)))
+             (if (memq recenter-target asm-overlays)
+                 (message "[beardbolt] maps to %s asm regions."
+                          (length asm-overlays))
+               (message "[beardbolt] asm region %s/%s for source line %s."
+                        (1+ (cl-position ov asm-overlays))
+                        (length asm-overlays)
+                        (with-current-buffer (overlay-buffer recenter-target)
+                          (line-number-at-pos (overlay-start recenter-target)))))
+             (bb--recenter-maybe recenter-target)
+             (pulse-momentary-highlight-overlay recenter-target
+                                                'bb-current-line-face)))
           ((not ov)
-           (dolist (ov bb--currently-synched-overlays)
-             (overlay-put ov 'face (overlay-get ov 'beardbolt-rainbow-face)))
+           (dolist (o all-ovs)
+             (overlay-put o 'face (overlay-get o 'beardbolt-rainbow-face)))
            (setq bb--currently-synched-overlays nil)))))
 
 (defvar bb--change-timer nil)
