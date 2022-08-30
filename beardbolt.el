@@ -202,8 +202,7 @@ Useful if you have multiple objdumpers and want to select between them")
 (cl-defun bb--c/c++-setup (&key base-cmd language)
   "Get compile specs for gcc/clang."
   (let* ((modified-p (buffer-modified-p))
-         (source-hint (if modified-p "<stdin>" (file-name-nondirectory
-                                                (buffer-file-name))))
+         (source-hint (if modified-p "<stdin>" (buffer-file-name)))
          (base-command (ensure-list (or bb-command
                                         (bb--guess-from-ccj)
                                         base-cmd)))
