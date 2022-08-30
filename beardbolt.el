@@ -436,7 +436,7 @@ some parts of the buffer and setup a buffer-local value of
               (setq reachable-label nil)))))))
 
 (cl-defun bb--rainbowize (src-buffer)
-  (bb--delete-rainbow-overlays)
+  (bb-clear-rainbow-overlays)
   (let* ((background-hsl
           (ignore-errors
             (apply #'color-rgb-to-hsl (color-name-to-rgb (face-background 'default)))))
@@ -508,14 +508,20 @@ some parts of the buffer and setup a buffer-local value of
   (let ((b (cl-gensym)))
     `(let ((,b ,buf)) (if (buffer-live-p ,b) (with-current-buffer ,b ,@body)))))
 
-(defun bb--delete-rainbow-overlays ()
-  (bb--when-live-buffer bb--source-buffer
-    (save-restriction
-      (widen)
-      (cl-loop for o in (overlays-in (point-min) (point-max))
-               when (overlay-get o 'beardbolt) do (delete-overlay o))))
-  (mapc #'delete-overlay bb--rainbow-overlays)
-  (setq bb--rainbow-overlays nil))
+(defun bb-clear-rainbow-overlays ()
+  "Clear rainbow from the source file and asm output."
+  (interactive)
+  (let ((output-buffer (if (eq major-mode 'bb--asm-mode)
+                           (current-buffer)
+                         bb--asm-buffer)))
+    (bb--when-live-buffer output-buffer
+      (bb--when-live-buffer bb--source-buffer
+        (save-restriction
+          (widen)
+          (cl-loop for o in (overlays-in (point-min) (point-max))
+                   when (overlay-get o 'beardbolt) do (delete-overlay o)))))
+      (mapc #'delete-overlay bb--rainbow-overlays)
+      (setq bb--rainbow-overlays nil)))
 
 ;;;;; Handlers
 (cl-defun bb--handle-finish-compile (compilation-buffer str)
@@ -620,6 +626,7 @@ determine LANG from `major-mode'."
 (defvar bb-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c C-c") #'bb-compile)
+    (define-key map (kbd "C-c C-d") #'bb-clear-rainbow-overlays)
     map)
   "Keymap for function `bb-mode'.")
 
@@ -695,6 +702,7 @@ With prefix argument, choose from starter files in `bb-starter-files'."
 (defvar bb--change-timer nil)
 
 (defun bb--after-change (&rest _)
+  (bb-clear-rainbow-overlays)
   (when bb-compile-delay
     (when (timerp bb--change-timer) (cancel-timer bb--change-timer))
     (setq bb--change-timer
@@ -733,7 +741,7 @@ With prefix argument, choose from starter files in `bb-starter-files'."
 
 (define-derived-mode bb--asm-mode asm-mode "⚡asm ⚡"
   "Toggle `bearbolt--output-mode', internal mode for asm buffers."
-  (add-hook 'kill-buffer-hook #'bb--delete-rainbow-overlays nil t)
+  (add-hook 'kill-buffer-hook #'bb-clear-rainbow-overlays nil t)
   (add-hook 'post-command-hook #'bb--synch-relation-overlays nil t)
   (setq truncate-lines t)
   (read-only-mode t)
