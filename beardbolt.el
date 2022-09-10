@@ -696,7 +696,8 @@ With prefix argument, choose from starter files in `bb-starter-files'."
   (let* ((at-point (overlays-at (point)))
          (all-ovs (if (eq major-mode 'bb--asm-mode)
                       bb--rainbow-overlays
-                    (buffer-local-value 'bb--rainbow-overlays bb--asm-buffer)))
+                    (and bb--asm-buffer
+                         (buffer-local-value 'bb--rainbow-overlays bb--asm-buffer))))
          (ov (cl-find-if (lambda (ov) (overlay-get ov 'beardbolt-rainbow-face))
                          at-point)))
     (cond ((and ov (not (member ov bb--currently-synched-overlays)))
