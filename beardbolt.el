@@ -759,8 +759,7 @@ With prefix argument, choose from starter files in `bb-starter-files'."
                           return (plist-get e :command)))
             (cmd (bb--split-rm-double cmd "-o"))
             (cmd (bb--split-rm-double cmd "-c"))
-            (cmd (bb--split-rm-single cmd "-flto" #'string-prefix-p))
-            (cmd (bb--split-rm-single cmd "-O" #'string-prefix-p)))
+            (cmd (bb--split-rm-single cmd "-flto" #'string-prefix-p)))
       (list cmd bb-ccj-extra-flags)))
 
 ;;;###autoload
