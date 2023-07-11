@@ -212,9 +212,14 @@ Useful if you have multiple objdumpers and want to select between them")
                                         base-cmd)))
          (cc (car (split-string (car base-command)))))
     (cl-labels ((f (x) (expand-file-name x (bb--sandbox-dir)))
+                (dash-masm-maybe ()
+                  (when (string-match
+                         "^\\(gcc\\|g\\+\\+\\|clang\\|clang\\+\\+\\)$"
+                         (file-name-base cc))
+                    (list (format "-masm=%s" bb-asm-format))))
                 (compile (in out) `(,@base-command
                                     "-g1"
-                                    "-S" ,(format "-masm=%s" bb-asm-format)
+                                    "-S" ,@(dash-masm-maybe)
                                     "-o" ,out
                                     ,@(if modified-p
                                           `("-x" ,language "-" "<" ,in)
