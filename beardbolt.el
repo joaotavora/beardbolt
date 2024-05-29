@@ -651,7 +651,7 @@ determine LANG from `major-mode'."
     ("rust" . "beardbolt.rs")))
 
 ;;;###autoload
-(defun bb-starter (lang-name)
+(defun beardbolt-starter (lang-name)
   "Setup new sandbox file for experiments.
 With prefix argument, choose from starter files in `bb-starter-files'."
   (interactive
@@ -763,7 +763,7 @@ With prefix argument, choose from starter files in `bb-starter-files'."
       (list cmd bb-ccj-extra-flags)))
 
 ;;;###autoload
-(define-minor-mode bb-mode
+(define-minor-mode beardbolt-mode
   "Toggle `beardbolt-mode'.  May be enabled by user in source buffer."
   :global nil :lighter " ⚡" :keymap bb-mode-map
   (cond
