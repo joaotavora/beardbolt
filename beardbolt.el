@@ -220,7 +220,7 @@ Useful if you have multiple objdumpers and want to select between them")
                                           `("-x" ,language "-" "<" ,in)
                                         `(,(buffer-file-name)))))
                 (assemble (in out) `("&&" ,cc "-c" ,in "-o" ,out))
-                (link     (in out) `("&&" ,cc ,in      "-o" ,out))
+                (link     (in out) `("&&" ,cc ,in      "-fsanitize=address" "-o" ,out))
                 (execute  (in)     `("&& (" ,in
                                      ,(if (stringp bb-execute) bb-execute "")
                                      "|| true )"))
@@ -283,6 +283,8 @@ Useful if you have multiple objdumpers and want to select between them")
 (defvar bb-languages
   `((c-mode    ,#'bb--c/c++-setup :base-cmd "gcc" :language "c")
     (c++-mode  ,#'bb--c/c++-setup :base-cmd "g++" :language "c++")
+    (c-ts-mode    ,#'bb--c/c++-setup :base-cmd "gcc" :language "c")
+    (c++-ts-mode  ,#'bb--c/c++-setup :base-cmd "g++" :language "c++")
     (rust-mode ,#'bb--rust-setup))
   "Alist of (MAJOR-MODE SETUP . SETUP-ARGS).
 
