@@ -74,7 +74,7 @@ Passed directly to compiler or disassembler."
 (bb--defoption bb-execute nil
   "Non-nil to run resulting program with these arguments."
   :type 'string :safe (lambda (v) (or (null v) (eq t v) (stringp v))))
-(bb--defoption bb-ccj-extra-flags nil
+(bb--defoption bb-ccj-extra-flags "-DBEARDBOLT"
   "Extra flags for compilation command devined from compile_commands.json."
   :type 'string :safe (lambda (v) (or (null v) (stringp v))))
 (bb--defoption bb-shuffle-rainbow nil
