@@ -223,7 +223,7 @@ Useful if you have multiple objdumpers and want to select between them")
                                     "-o" ,out
                                     ,@(if modified-p
                                           `("-x" ,language "-" "<" ,in)
-                                        `(,(buffer-file-name)))))
+                                        `(,(shell-quote-argument (buffer-file-name))))))
                 (assemble (in out) `("&&" ,cc "-c" ,in "-o" ,out))
                 (link     (in out) `("&&" ,cc ,in      "-fsanitize=address" "-o" ,out))
                 (execute  (in)     `("&& (" ,in
