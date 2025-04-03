@@ -1,5 +1,5 @@
 #include <iostream>
-#include <array>
+#include <algorithm>
 #include <vector>
 
 template <typename It>
@@ -10,19 +10,22 @@ void bubble(It from, It to) {
         std::swap(*j, *(j - 1));
 }
 
-int main() {
-  std::vector v{5, 2, 1, 4, 2};
-  bubble(v.begin(), v.end());
+int main(int argc, char* argv[]) {
+  std::vector<int> vi;
+  std::transform(argv, argv+argc, std::back_inserter(vi),
+      std::atoi);
+  bubble(vi.begin(), vi.end());
 
-  std::cout << "Sorted array : ";
-  for (const auto& e : v) std::cout << e << "\n";
+  std::cout << "Sorted array : \n";
+  for (auto&& e : vi) std::cout << e << "\n";
   return 0;
 }
 
 // Local Variables:
-// beardbolt-command: "g++ -std=c++20 -O0"
+// beardbolt-command: "g++ -std=c++20 -O3"
 // beardbolt-demangle: t
-// beardbolt-execute: t
+// beardbolt-execute: "5 4 blargh 2 1"
+// beardbolt-link-flags: "-fsanitize=address"
 // beardbolt-disassemble: nil
 // beardbolt-preserve-library-functions: nil
 // beardbolt-preserve-unused-labels: nil

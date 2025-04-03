@@ -49,6 +49,9 @@
 (bb--defoption bb-command nil
   "The base command to run beardbolt from."
   :type 'string :safe (lambda (v) (or (listp v) (stringp v))))
+(bb--defoption bb-link-flags nil
+  "Linker flags to pass to linking command."
+  :type 'string :safe (lambda (v) (or (listp v) (stringp v))))
 (bb--defoption bb-disassemble nil
   "Non-nil to assemble then disassemble an output binary."
   :type 'boolean :safe 'booleanp)
@@ -225,7 +228,7 @@ Useful if you have multiple objdumpers and want to select between them")
                                           `("-x" ,language "-" "<" ,in)
                                         `(,(shell-quote-argument (buffer-file-name))))))
                 (assemble (in out) `("&&" ,cc "-c" ,in "-o" ,out))
-                (link     (in out) `("&&" ,cc ,in      "-fsanitize=address" "-o" ,out))
+                (link     (in out) `("&&" ,cc ,@(ensure-list bb-link-flags) ,in "-o" ,out))
                 (execute  (in)     `("&& (" ,in
                                      ,(if (stringp bb-execute) bb-execute "")
                                      "|| true )"))
