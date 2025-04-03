@@ -316,9 +316,9 @@ some parts of the buffer and setup a buffer-local value of
 (defmacro bb--sweeping (&rest forms)
   (declare (indent 0)
            (debug (&rest (form &rest form))))
-  (let ((lbp (cl-gensym "lbp-")) (lep (cl-gensym "lep-"))
-        (preserve-directives (cl-gensym "preserve-directives-"))
-        (linum (cl-gensym "linum-")))
+  (let ((lbp (gensym "lbp-")) (lep (gensym "lep-"))
+        (preserve-directives (gensym "preserve-directives-"))
+        (linum (gensym "linum-")))
     `(let ((,preserve-directives (bb--get bb-preserve-directives))
            (,linum 1))
        (goto-char (point-min))
@@ -525,7 +525,7 @@ some parts of the buffer and setup a buffer-local value of
 
 (cl-defmacro bb--when-live-buffer (buf &rest body)
   "Check BUF live, then do BODY in it." (declare (indent 1) (debug t))
-  (let ((b (cl-gensym)))
+  (let ((b (gensym)))
     `(let ((,b ,buf)) (if (buffer-live-p ,b) (with-current-buffer ,b ,@body)))))
 
 (defun bb-clear-rainbow-overlays ()
@@ -638,7 +638,7 @@ determine LANG from `major-mode'."
 
 (defun bb--maybe-stop-running-compilation ()
   (let ((buffer (bb--compilation-buffer)))
-    (when-let ((proc (get-buffer-process buffer)))
+    (when-let* ((proc (get-buffer-process buffer)))
       (set-process-query-on-exit-flag proc nil)
       (interrupt-process proc))))
 
