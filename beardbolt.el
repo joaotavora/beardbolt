@@ -382,10 +382,11 @@ some parts of the buffer and setup a buffer-local value of
 (defun bb--process-asm (main-file-name)
   (let* ((used-labels (obarray-make))
          (routines (make-hash-table :test #'equal))
+         (globals (make-hash-table :test #'equal))
          main-file-tag
          main-file-routines
          source-linum
-         current-routine
+         current-global
          reachable-label
          (preserve-comments (bb--get bb-preserve-comments))
          (preserve-unused-labels (bb--get bb-preserve-unused-labels))
@@ -393,29 +394,31 @@ some parts of the buffer and setup a buffer-local value of
     (bb--sweeping ; first pass
       ((not (eq (char-after) ?\t))
        (cond ((match bb-label-start)
-              (unless (eq :notfound (gethash (match-string 1) routines :notfound))
-                (setq current-routine (match-string 1)))
+              (unless (eq :notfound (gethash (match-string 1) globals :notfound))
+                (setq current-global (match-string 1)))
               :preserve)
              (t :kill)))
       (t
-       (cond ((and current-routine (match bb-has-opcode))
+       (cond ((and current-global (match bb-has-opcode))
+              (when (eq :notfound (gethash current-global routines :notfound))
+                (puthash current-global nil routines))
               (while (match bb-label-reference)
-                (push (match-string 0) (gethash current-routine routines)))
+                (push (match-string 0) (gethash current-global routines)))
               :preserve)
              ((and (not preserve-comments) (match bb-comment-only))
               :kill)
              ((match bb-defines-global bb-defines-function-or-object)
-              (puthash (match-string 1) nil routines))
+              (puthash (match-string 1) nil globals))
              ((and (match bb-source-file-hint)
                    (equal (or (match-string 3) (match-string 2))
                           main-file-name))
               (setq main-file-tag (match-string 1)))
              ((match bb-source-tag)
-              (when (and current-routine
+              (when (and current-global
                          (equal (match-string 1) main-file-tag))
-                (push current-routine main-file-routines))
+                (push current-global main-file-routines))
               :preserve)
-             ((match bb-endblock) (setq current-routine nil) :preserve)
+             ((match bb-endblock) (setq current-global nil) :preserve)
              (t :preserve))))
     (dolist (mfr (if preserve-library-functions
                      (hash-table-keys routines)
